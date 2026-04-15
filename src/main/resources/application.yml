@@ -1,0 +1,8 @@
+server:
+  port: 8080
+
+ollama:
+  base-url: http://192.168.0.33:11434
+  model: qwen3.5:9b
+  connect-timeout: 5s
+  read-timeout: 120s
