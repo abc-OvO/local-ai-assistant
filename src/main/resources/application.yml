@@ -1,8 +1,16 @@
 server:
   port: 8080
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
 
 ollama:
   base-url: http://192.168.0.33:11434
   model: qwen3.5:9b
   connect-timeout: 5s
   read-timeout: 120s
+
+app:
+  upload-dir: data/uploads
+  max-context-length: 4000

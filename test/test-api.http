@@ -1,0 +1,26 @@
+### 已上传文档提问：文档主要讲了什么
+POST http://localhost:8080/api/knowledge/ask
+Content-Type: application/json
+
+{
+  "documentId": "51ddfa69-be36-47d3-9c7e-e162d0c0707f",
+  "question": "这份文档主要讲了什么？"
+}
+
+### 已上传文档提问：项目使用了什么技术
+POST http://localhost:8080/api/knowledge/ask
+Content-Type: application/json
+
+{
+  "documentId": "51ddfa69-be36-47d3-9c7e-e162d0c0707f",
+  "question": "这个项目使用了什么技术？"
+}
+
+### 不存在的 documentId
+POST http://localhost:8080/api/knowledge/ask
+Content-Type: application/json
+
+{
+  "documentId": "not-exist-123",
+  "question": "这份文档主要讲了什么？"
+}
