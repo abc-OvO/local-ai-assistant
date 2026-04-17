@@ -3,7 +3,7 @@ POST http://localhost:8080/api/knowledge/ask
 Content-Type: application/json
 
 {
-  "documentId": "51ddfa69-be36-47d3-9c7e-e162d0c0707f",
+  "documentId": "21cbc909-9b04-47e9-8abf-b9b77d466fb3",
   "question": "这份文档主要讲了什么？"
 }
 
@@ -12,7 +12,7 @@ POST http://localhost:8080/api/knowledge/ask
 Content-Type: application/json
 
 {
-  "documentId": "51ddfa69-be36-47d3-9c7e-e162d0c0707f",
+  "documentId": "2c1b442d-d813-4113-b6f6-43e01ae2aac4",
   "question": "这个项目使用了什么技术？"
 }
 

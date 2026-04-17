@@ -9,7 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import java.util.stream.Collectors;
 
@@ -28,13 +28,6 @@ public class GlobalExceptionHandler {
         return Result.fail(400, message);
     }
 
-    @ExceptionHandler(UnsupportedFileTypeException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public Result<Void> handleUnsupportedFileTypeException(UnsupportedFileTypeException ex) {
-        log.warn("Unsupported file type: {}", ex.getMessage());
-        return Result.fail(400, ex.getMessage());
-    }
-
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<Void>> handleBusinessException(BusinessException ex) {
         log.warn("Business exception, code={}, msg={}", ex.getCode(), ex.getMessage(), ex);
@@ -43,10 +36,24 @@ public class GlobalExceptionHandler {
                 .body(Result.fail(ex.getCode(), ex.getMessage()));
     }
 
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    @ExceptionHandler(UnsupportedFileTypeException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public Result<Void> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex) {
+    public Result<Void> handleUnsupportedFileTypeException(UnsupportedFileTypeException ex) {
+        log.warn("Unsupported file type: {}", ex.getMessage());
+        return Result.fail(400, ex.getMessage());
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleMaxUploadSizeExceededException(org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        log.warn("Upload file too large: {}", ex.getMessage());
         return Result.fail(400, "上传文件过大，超过系统限制");
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    @ResponseStatus(HttpStatus.OK)
+    public void handleAsyncRequestNotUsableException(AsyncRequestNotUsableException ex) {
+        log.warn("Client disconnected before response was written: {}", ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

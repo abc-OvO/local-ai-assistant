@@ -25,12 +25,22 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     @Override
     public KnowledgeAskResponse ask(String documentId, String question) {
+        long start = System.currentTimeMillis();
+
         DocumentRecord document = documentService.getDocument(documentId);
         String context = buildContext(document.getContent());
         String prompt = buildPrompt(context, question);
 
+        System.out.println("[KnowledgeAsk] documentId=" + documentId
+                + ", question=" + question
+                + ", contextLength=" + context.length()
+                + ", promptLength=" + prompt.length());
+
         OllamaGenerateResponse ollamaResponse = ollamaClient.generate(prompt);
         String model = ollamaResponse.getModel() == null ? ollamaProperties.getModel() : ollamaResponse.getModel();
+
+        long cost = System.currentTimeMillis() - start;
+        System.out.println("[KnowledgeAsk] success, costMs=" + cost);
 
         return new KnowledgeAskResponse(
                 document.getDocumentId(),

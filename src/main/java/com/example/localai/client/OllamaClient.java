@@ -16,7 +16,6 @@ import org.springframework.web.client.RestClientException;
 public class OllamaClient {
 
     private final RestClient ollamaRestClient;
-
     private final OllamaProperties properties;
 
     public OllamaGenerateResponse generate(String message) {
@@ -25,6 +24,9 @@ public class OllamaClient {
                 message,
                 false
         );
+
+        long start = System.currentTimeMillis();
+        System.out.println("[OllamaClient] request start, promptLength=" + message.length());
 
         try {
             OllamaGenerateResponse response = ollamaRestClient.post()
@@ -36,13 +38,29 @@ public class OllamaClient {
                     })
                     .body(OllamaGenerateResponse.class);
 
+            long cost = System.currentTimeMillis() - start;
+            System.out.println("[OllamaClient] request success, costMs=" + cost);
+
             if (response == null || response.getResponse() == null) {
                 throw new BusinessException(502, "Ollama 返回内容为空");
             }
             return response;
         } catch (ResourceAccessException ex) {
+            long cost = System.currentTimeMillis() - start;
+            System.out.println("[OllamaClient] request failed, costMs=" + cost + ", error=" + ex.getMessage());
+
+            Throwable cause = ex;
+            while (cause != null) {
+                if (cause instanceof java.net.SocketTimeoutException) {
+                    throw new BusinessException(502, "Ollama 响应超时，请稍后重试或适当增大 read-timeout", ex);
+                }
+                cause = cause.getCause();
+            }
+
             throw new BusinessException(502, "Ollama 服务不可用，请检查地址、网络或 Tailscale 子网路由", ex);
         } catch (RestClientException ex) {
+            long cost = System.currentTimeMillis() - start;
+            System.out.println("[OllamaClient] request failed, costMs=" + cost + ", error=" + ex.getMessage());
             throw new BusinessException(502, "调用 Ollama 服务失败：" + ex.getMessage(), ex);
         }
     }

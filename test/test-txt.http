@@ -1,2 +1,2 @@
 POST http://localhost:8080/api/documents/upload \
-    -F "file=@/你的路径/test.txt"
+    -F "file=@/Users/wjh/Projects/local-ai-assistant/test/test.txt"
