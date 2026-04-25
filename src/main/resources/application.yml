@@ -1,5 +1,7 @@
 server:
   port: 8080
+
+spring:
   servlet:
     multipart:
       max-file-size: 20MB
@@ -8,9 +10,13 @@ server:
 ollama:
   base-url: http://192.168.0.33:11434
   model: qwen3.5:9b
+  embedding-model: nomic-embed-text
   connect-timeout: 5s
   read-timeout: 300s
 
 app:
   upload-dir: data/uploads
   max-context-length: 8000
+  chunk-size: 400
+  chunk-overlap: 80
+  retrieval-top-k: 3

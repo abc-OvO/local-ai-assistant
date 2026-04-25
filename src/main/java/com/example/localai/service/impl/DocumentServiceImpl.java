@@ -6,9 +6,13 @@ import com.example.localai.dto.DocumentUploadResponse;
 import com.example.localai.exception.BusinessException;
 import com.example.localai.exception.DocumentNotFoundException;
 import com.example.localai.exception.UnsupportedFileTypeException;
+import com.example.localai.model.DocumentChunk;
 import com.example.localai.model.DocumentRecord;
+import com.example.localai.service.ChunkingService;
 import com.example.localai.service.DocumentParser;
 import com.example.localai.service.DocumentService;
+import com.example.localai.service.EmbeddingService;
+import com.example.localai.service.RetrievalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -32,6 +36,12 @@ public class DocumentServiceImpl implements DocumentService {
     private final AppProperties appProperties;
 
     private final List<DocumentParser> documentParsers;
+
+    private final ChunkingService chunkingService;
+
+    private final EmbeddingService embeddingService;
+
+    private final RetrievalService retrievalService;
 
     private final ConcurrentMap<String, DocumentRecord> documentStore = new ConcurrentHashMap<>();
 
@@ -71,7 +81,14 @@ public class DocumentServiceImpl implements DocumentService {
                     savedPath.toString(),
                     content
             );
+
+            List<DocumentChunk> chunks = buildDocumentChunks(documentId, content);
+            retrievalService.saveDocumentChunks(documentId, chunks);
+
             documentStore.put(documentId, record);
+            System.out.println("[DocumentUpload] documentId=" + documentId
+                    + ", fileName=" + originalFileName
+                    + ", chunkCount=" + chunks.size());
             return toUploadResponse(record);
         } catch (IOException ex) {
             throw new BusinessException(500, "文件保存或解析失败：" + ex.getMessage(), ex);
@@ -109,6 +126,27 @@ public class DocumentServiceImpl implements DocumentService {
             throw new UnsupportedFileTypeException("文件缺少扩展名，仅支持 txt、md、pdf");
         }
         return fileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+    }
+
+    private List<DocumentChunk> buildDocumentChunks(String documentId, String content) {
+        List<String> chunkContents = chunkingService.split(content);
+        if (chunkContents.isEmpty()) {
+            throw new BusinessException(400, "文件未生成有效文本块");
+        }
+
+        return java.util.stream.IntStream.range(0, chunkContents.size())
+                .mapToObj(index -> {
+                    String chunkContent = chunkContents.get(index);
+                    return new DocumentChunk(
+                            UUID.randomUUID().toString(),
+                            documentId,
+                            index,
+                            chunkContent,
+                            embeddingService.embed(chunkContent),
+                            null
+                    );
+                })
+                .toList();
     }
 
     private DocumentUploadResponse toUploadResponse(DocumentRecord record) {

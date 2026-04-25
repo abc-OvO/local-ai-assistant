@@ -1,3 +1,8 @@
-这是一个测试文档。
-Spring Boot 是一个 Java 后端开发框架。
-Ollama 用于本地大模型推理。
+这是一个本地 AI 问答后端项目的测试文档。
+
+项目使用 Java 17、Spring Boot 3、Maven 和 Ollama。
+系统支持文档上传、文档切块、embedding 向量生成、余弦相似度检索，以及基于检索片段的 RAG 问答。
+当前支持上传 txt、md、pdf 文件。
+项目没有使用 Redis，也没有引入数据库。
+
+这份文档主要用于接口自动化测试，方便验证 /api/documents/upload、/api/documents 和 /api/knowledge/ask 的行为是否正常。

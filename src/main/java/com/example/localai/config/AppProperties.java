@@ -14,4 +14,13 @@ public class AppProperties {
 
     @Min(value = 1000, message = "max-context-length 不能小于 1000")
     private Integer maxContextLength = 4000;
+
+    @Min(value = 100, message = "chunk-size 不能小于 100")
+    private Integer chunkSize = 400;
+
+    @Min(value = 0, message = "chunk-overlap 不能小于 0")
+    private Integer chunkOverlap = 80;
+
+    @Min(value = 1, message = "retrieval-top-k 不能小于 1")
+    private Integer retrievalTopK = 3;
 }

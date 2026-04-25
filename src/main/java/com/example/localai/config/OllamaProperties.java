@@ -18,6 +18,9 @@ public class OllamaProperties {
     @NotBlank(message = "Ollama model 不能为空")
     private String model;
 
+    @NotBlank(message = "Ollama embedding-model 不能为空")
+    private String embeddingModel = "nomic-embed-text";
+
     @DurationUnit(ChronoUnit.SECONDS)
     private Duration connectTimeout = Duration.ofSeconds(5);
 
