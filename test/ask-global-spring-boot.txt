@@ -1,0 +1,4 @@
+Spring Boot 是一个用于构建 Java 应用的框架。
+它简化了 Spring 应用的配置，提供自动配置、内嵌 Web 服务器和生产级监控能力。
+这个项目使用的技术包括 Java、Spring Boot、REST API、Maven，以及本地大模型文档问答能力。
+Spring Boot 常用于开发后端服务、微服务和企业级 Web 应用。

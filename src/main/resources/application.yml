@@ -7,12 +7,20 @@ spring:
       max-file-size: 20MB
       max-request-size: 20MB
 
+ai:
+  provider: ollama
+
 ollama:
   base-url: http://192.168.0.33:11434
   model: qwen3.5:9b
   embedding-model: nomic-embed-text
   connect-timeout: 5s
   read-timeout: 300s
+
+kimi:
+  base-url: https://api.moonshot.ai/v1
+  api-key: ${KIMI_API_KEY:}
+  model: kimi-k2.5
 
 app:
   upload-dir: data/uploads

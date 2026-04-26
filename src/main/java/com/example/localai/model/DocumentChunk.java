@@ -15,6 +15,8 @@ public class DocumentChunk {
 
     private String documentId;
 
+    private String fileName;
+
     private Integer chunkIndex;
 
     private String content;

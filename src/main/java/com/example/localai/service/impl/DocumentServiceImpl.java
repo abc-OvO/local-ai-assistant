@@ -82,7 +82,7 @@ public class DocumentServiceImpl implements DocumentService {
                     content
             );
 
-            List<DocumentChunk> chunks = buildDocumentChunks(documentId, content);
+            List<DocumentChunk> chunks = buildDocumentChunks(documentId, originalFileName, content);
             retrievalService.saveDocumentChunks(documentId, chunks);
 
             documentStore.put(documentId, record);
@@ -128,7 +128,7 @@ public class DocumentServiceImpl implements DocumentService {
         return fileName.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
     }
 
-    private List<DocumentChunk> buildDocumentChunks(String documentId, String content) {
+    private List<DocumentChunk> buildDocumentChunks(String documentId, String fileName, String content) {
         List<String> chunkContents = chunkingService.split(content);
         if (chunkContents.isEmpty()) {
             throw new BusinessException(400, "文件未生成有效文本块");
@@ -140,6 +140,7 @@ public class DocumentServiceImpl implements DocumentService {
                     return new DocumentChunk(
                             UUID.randomUUID().toString(),
                             documentId,
+                            fileName,
                             index,
                             chunkContent,
                             embeddingService.embed(chunkContent),

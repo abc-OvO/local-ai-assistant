@@ -1,10 +1,8 @@
 package com.example.localai.service.impl;
 
-import com.example.localai.client.OllamaClient;
+import com.example.localai.client.AiChatClientRouter;
 import com.example.localai.config.AppProperties;
-import com.example.localai.config.OllamaProperties;
 import com.example.localai.dto.KnowledgeAskResponse;
-import com.example.localai.dto.OllamaGenerateResponse;
 import com.example.localai.dto.RetrievedChunkInfo;
 import com.example.localai.model.DocumentChunk;
 import com.example.localai.model.DocumentRecord;
@@ -24,9 +22,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     private final DocumentService documentService;
 
-    private final OllamaClient ollamaClient;
-
-    private final OllamaProperties ollamaProperties;
+    private final AiChatClientRouter aiChatClientRouter;
 
     private final AppProperties appProperties;
 
@@ -42,6 +38,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         List<Double> questionEmbedding = embeddingService.embed(question);
         List<DocumentChunk> retrievedChunks = retrievalService.retrieve(
                 documentId,
+                question,
                 questionEmbedding,
                 appProperties.getRetrievalTopK()
         );
@@ -54,8 +51,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 + ", contextLength=" + context.length()
                 + ", promptLength=" + prompt.length());
 
-        OllamaGenerateResponse ollamaResponse = ollamaClient.generate(prompt);
-        String model = ollamaResponse.getModel() == null ? ollamaProperties.getModel() : ollamaResponse.getModel();
+        String reply = aiChatClientRouter.generate(prompt);
+        String model = aiChatClientRouter.currentModel();
 
         long cost = System.currentTimeMillis() - start;
         System.out.println("[KnowledgeAsk] success, costMs=" + cost);
@@ -64,7 +61,41 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 document.getDocumentId(),
                 document.getFileName(),
                 model,
-                ollamaResponse.getResponse(),
+                reply,
+                toRetrievedChunkInfos(retrievedChunks)
+        );
+    }
+
+    @Override
+    public KnowledgeAskResponse askGlobal(String question) {
+        long start = System.currentTimeMillis();
+
+        List<Double> questionEmbedding = embeddingService.embed(question);
+        List<DocumentChunk> retrievedChunks = retrievalService.retrieveGlobal(
+                question,
+                questionEmbedding,
+                appProperties.getRetrievalTopK()
+        );
+        String context = buildContext(retrievedChunks);
+        String prompt = buildPrompt(context, question);
+
+        System.out.println("[KnowledgeAskGlobal] question=" + question
+                + ", retrievedChunks=" + retrievedChunks.size()
+                + ", contextLength=" + context.length()
+                + ", promptLength=" + prompt.length());
+
+        String reply = aiChatClientRouter.generate(prompt);
+        String model = aiChatClientRouter.currentModel();
+
+        long cost = System.currentTimeMillis() - start;
+        System.out.println("[KnowledgeAskGlobal] success, costMs=" + cost);
+
+        DocumentChunk firstChunk = retrievedChunks.get(0);
+        return new KnowledgeAskResponse(
+                firstChunk.getDocumentId(),
+                firstChunk.getFileName(),
+                model,
+                reply,
                 toRetrievedChunkInfos(retrievedChunks)
         );
     }
@@ -100,6 +131,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         return chunks.stream()
                 .map(chunk -> new RetrievedChunkInfo(
                         chunk.getChunkId(),
+                        chunk.getDocumentId(),
+                        chunk.getFileName(),
                         chunk.getChunkIndex(),
                         chunk.getScore(),
                         buildPreview(chunk.getContent())

@@ -1,13 +1,15 @@
 package com.example.localai;
 
+import com.example.localai.config.AiProperties;
 import com.example.localai.config.AppProperties;
+import com.example.localai.config.KimiProperties;
 import com.example.localai.config.OllamaProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @SpringBootApplication
-@EnableConfigurationProperties({OllamaProperties.class, AppProperties.class})
+@EnableConfigurationProperties({OllamaProperties.class, AppProperties.class, AiProperties.class, KimiProperties.class})
 public class LocalAiApplication {
 
     public static void main(String[] args) {
