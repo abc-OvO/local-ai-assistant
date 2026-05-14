@@ -27,3 +27,6 @@ app:
   chunk-size: 400
   chunk-overlap: 80
   retrieval-top-k: 3
+  memory:
+    enabled: true
+    max-turns: 6

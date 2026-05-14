@@ -26,6 +26,6 @@ public class KnowledgeController {
 
     @PostMapping("/ask-global")
     public Result<KnowledgeAskResponse> askGlobal(@Valid @RequestBody GlobalKnowledgeAskRequest request) {
-        return Result.success(knowledgeService.askGlobal(request.getQuestion()));
+        return Result.success(knowledgeService.askGlobal(request.getSessionId(), request.getQuestion()));
     }
 }

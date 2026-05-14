@@ -7,4 +7,6 @@ public interface KnowledgeService {
     KnowledgeAskResponse ask(String documentId, String question);
 
     KnowledgeAskResponse askGlobal(String question);
+
+    KnowledgeAskResponse askGlobal(String sessionId, String question);
 }

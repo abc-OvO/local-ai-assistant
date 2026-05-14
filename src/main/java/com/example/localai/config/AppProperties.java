@@ -23,4 +23,15 @@ public class AppProperties {
 
     @Min(value = 1, message = "retrieval-top-k 不能小于 1")
     private Integer retrievalTopK = 3;
+
+    private Memory memory = new Memory();
+
+    @Data
+    public static class Memory {
+
+        private boolean enabled = true;
+
+        @Min(value = 0, message = "memory.max-turns 不能小于 0")
+        private Integer maxTurns = 6;
+    }
 }
