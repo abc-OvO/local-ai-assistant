@@ -13,9 +13,9 @@ public class KimiProperties {
     private String baseUrl = "https://api.moonshot.ai/v1";
 
     /**
-     * 建议通过环境变量 KIMI_API_KEY 注入。
+     * 建议通过环境变量 MOONSHOT_API_KEY 注入。
      */
     private String apiKey;
 
-    private String model = "kimi-k2.5";
+    private String model = "kimi-k2.6";
 }

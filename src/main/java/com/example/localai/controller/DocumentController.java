@@ -1,11 +1,15 @@
 package com.example.localai.controller;
 
 import com.example.localai.common.Result;
+import com.example.localai.dto.DeleteDocumentResponse;
+import com.example.localai.dto.DocumentDetailResponse;
 import com.example.localai.dto.DocumentSummaryResponse;
 import com.example.localai.dto.DocumentUploadResponse;
 import com.example.localai.service.DocumentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -29,5 +33,15 @@ public class DocumentController {
     @GetMapping
     public Result<List<DocumentSummaryResponse>> listDocuments() {
         return Result.success(documentService.listDocuments());
+    }
+
+    @GetMapping("/{documentId}")
+    public Result<DocumentDetailResponse> getDocument(@PathVariable String documentId) {
+        return Result.success(documentService.getDocumentDetail(documentId));
+    }
+
+    @DeleteMapping("/{documentId}")
+    public Result<DeleteDocumentResponse> deleteDocument(@PathVariable String documentId) {
+        return Result.success(documentService.deleteDocument(documentId));
     }
 }

@@ -30,7 +30,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<Void>> handleBusinessException(BusinessException ex) {
-        log.warn("Business exception, code={}, msg={}", ex.getCode(), ex.getMessage(), ex);
+        log.warn("Business exception, code={}, msg={}", ex.getCode(), ex.getMessage());
         return ResponseEntity
                 .status(resolveStatus(ex.getCode()))
                 .body(Result.fail(ex.getCode(), ex.getMessage()));

@@ -1,74 +1,59 @@
 const state = {
   documents: [],
   selectedDocumentId: null,
-  mode: "single",
-  sessionId: "default"
-};
-
-const modeMeta = {
-  single: {
-    label: "单文档",
-    metric: "RAG",
-    description: "使用当前选中文档进行检索增强问答",
-    activeText: "单文档模式需要先选择文档",
-    loading: "正在检索当前文档..."
-  },
-  global: {
-    label: "全局知识库",
-    metric: "GLOBAL",
-    description: "跨全部已索引文档执行多文档检索增强问答",
-    activeText: "全局模式不需要选择文档",
-    loading: "正在执行全局检索..."
-  },
-  chat: {
-    label: "普通聊天",
-    metric: "CHAT",
-    description: "直接调用本地聊天模型，不使用知识库检索",
-    activeText: "普通聊天不会读取文档",
-    loading: "正在调用聊天模型..."
-  }
+  mode: "global",
+  sessionId: "default",
+  provider: null,
+  sending: false
 };
 
 const els = {
+  toastHost: document.querySelector("#toastHost"),
+  generationProviderText: document.querySelector("#generationProviderText"),
+  embeddingProviderText: document.querySelector("#embeddingProviderText"),
+  embeddingModelText: document.querySelector("#embeddingModelText"),
   documentCountText: document.querySelector("#documentCountText"),
-  currentModeText: document.querySelector("#currentModeText"),
-  refreshDocumentsBtn: document.querySelector("#refreshDocumentsBtn"),
+  chunkTotalText: document.querySelector("#chunkTotalText"),
+  providerSelect: document.querySelector("#providerSelect"),
+  applyProviderBtn: document.querySelector("#applyProviderBtn"),
+  providerStatus: document.querySelector("#providerStatus"),
+  refreshAllBtn: document.querySelector("#refreshAllBtn"),
   fileInput: document.querySelector("#fileInput"),
   fileNameText: document.querySelector("#fileNameText"),
   uploadBtn: document.querySelector("#uploadBtn"),
   uploadStatus: document.querySelector("#uploadStatus"),
-  uploadResult: document.querySelector("#uploadResult"),
+  refreshDocumentsBtn: document.querySelector("#refreshDocumentsBtn"),
   documentStatus: document.querySelector("#documentStatus"),
   documentList: document.querySelector("#documentList"),
-  selectedDocumentCard: document.querySelector("#selectedDocumentCard"),
-  singleModeBtn: document.querySelector("#singleModeBtn"),
-  globalModeBtn: document.querySelector("#globalModeBtn"),
-  chatModeBtn: document.querySelector("#chatModeBtn"),
-  modeDescription: document.querySelector("#modeDescription"),
-  activeDocumentText: document.querySelector("#activeDocumentText"),
+  detailTitle: document.querySelector("#detailTitle"),
+  detailMeta: document.querySelector("#detailMeta"),
+  documentDetail: document.querySelector("#documentDetail"),
   sessionIdInput: document.querySelector("#sessionIdInput"),
+  newSessionBtn: document.querySelector("#newSessionBtn"),
   clearMemoryBtn: document.querySelector("#clearMemoryBtn"),
+  sessionStatus: document.querySelector("#sessionStatus"),
+  sessionList: document.querySelector("#sessionList"),
+  globalModeBtn: document.querySelector("#globalModeBtn"),
+  singleModeBtn: document.querySelector("#singleModeBtn"),
+  chatModeBtn: document.querySelector("#chatModeBtn"),
+  activeContextText: document.querySelector("#activeContextText"),
+  messageList: document.querySelector("#messageList"),
+  chunksList: document.querySelector("#chunksList"),
   questionInput: document.querySelector("#questionInput"),
   askBtn: document.querySelector("#askBtn"),
-  askStatus: document.querySelector("#askStatus"),
-  answerBox: document.querySelector("#answerBox"),
-  modelText: document.querySelector("#modelText"),
-  chunkCountText: document.querySelector("#chunkCountText"),
-  chunksList: document.querySelector("#chunksList")
+  askStatus: document.querySelector("#askStatus")
 };
 
 const modeButtons = {
-  single: els.singleModeBtn,
   global: els.globalModeBtn,
+  single: els.singleModeBtn,
   chat: els.chatModeBtn
 };
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, options);
   const contentType = response.headers.get("content-type") || "";
-  const payload = contentType.includes("application/json")
-    ? await response.json()
-    : await response.text();
+  const payload = contentType.includes("application/json") ? await response.json() : await response.text();
 
   if (!response.ok) {
     const message = typeof payload === "object" && payload !== null
@@ -76,15 +61,21 @@ async function requestJson(url, options = {}) {
       : payload || response.statusText;
     throw new Error(message);
   }
-
   if (payload && typeof payload === "object" && "code" in payload) {
     if (payload.code !== 0) {
       throw new Error(payload.msg || "请求失败");
     }
     return payload.data;
   }
-
   return payload;
+}
+
+function toast(message, type = "success") {
+  const item = document.createElement("div");
+  item.className = `toast ${type}`;
+  item.textContent = message;
+  els.toastHost.appendChild(item);
+  setTimeout(() => item.remove(), 3200);
 }
 
 function setStatus(el, message, type = "") {
@@ -94,14 +85,7 @@ function setStatus(el, message, type = "") {
 
 function setBusy(button, busy, text) {
   button.disabled = busy;
-  if (text) {
-    const label = button.querySelector("span");
-    if (label) {
-      label.textContent = text;
-    } else {
-      button.textContent = text;
-    }
-  }
+  if (text) button.textContent = text;
 }
 
 function escapeHtml(value) {
@@ -114,14 +98,9 @@ function escapeHtml(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "-";
-  }
+  if (!value) return "-";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 function formatScore(score) {
@@ -129,207 +108,273 @@ function formatScore(score) {
   return Number.isFinite(value) ? value.toFixed(4) : "-";
 }
 
-function currentDocument() {
+function currentSessionId() {
+  const sessionId = els.sessionIdInput.value.trim() || "default";
+  state.sessionId = sessionId;
+  els.sessionStatus.textContent = `当前 session：${sessionId}`;
+  return sessionId;
+}
+
+function selectedDocument() {
   return state.documents.find((doc) => doc.documentId === state.selectedDocumentId) || null;
 }
 
-function updateMode(mode) {
-  state.mode = mode;
-
-  for (const [name, button] of Object.entries(modeButtons)) {
-    const isActive = name === mode;
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-selected", String(isActive));
+async function loadProvider() {
+  try {
+    const status = await requestJson("/api/settings/provider");
+    state.provider = status.currentProvider;
+    els.providerSelect.value = status.currentProvider;
+    els.generationProviderText.textContent = status.generationProvider;
+    els.embeddingProviderText.textContent = status.embeddingProvider;
+    els.embeddingModelText.textContent = status.embeddingModel;
+    setStatus(els.providerStatus, `generation=${status.generationProvider}, embedding=${status.embeddingProvider}`, "success");
+  } catch (error) {
+    setStatus(els.providerStatus, `Provider 状态读取失败：${error.message}`, "error");
+    toast("Provider 状态读取失败", "error");
   }
+}
 
-  els.currentModeText.textContent = modeMeta[mode].metric;
-  els.modeDescription.textContent = modeMeta[mode].description;
-  renderSelectedDocument();
+async function switchProvider() {
+  const provider = els.providerSelect.value;
+  setBusy(els.applyProviderBtn, true, "应用中");
+  try {
+    await requestJson("/api/settings/provider", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider })
+    });
+    await loadProvider();
+    toast(`已切换 generation provider：${provider}`);
+  } catch (error) {
+    setStatus(els.providerStatus, `切换失败：${error.message}`, "error");
+    toast(`切换失败：${error.message}`, "error");
+  } finally {
+    setBusy(els.applyProviderBtn, false, "应用");
+  }
+}
+
+async function loadDocuments() {
+  setStatus(els.documentStatus, "正在同步文档...", "loading");
+  try {
+    const docs = await requestJson("/api/documents");
+    state.documents = Array.isArray(docs) ? docs : [];
+    if (state.selectedDocumentId && !state.documents.some((doc) => doc.documentId === state.selectedDocumentId)) {
+      state.selectedDocumentId = null;
+      clearDocumentDetail();
+    }
+    renderDocuments();
+    setStatus(els.documentStatus, `已同步 ${state.documents.length} 个文档。`, "success");
+  } catch (error) {
+    setStatus(els.documentStatus, `同步失败：${error.message}`, "error");
+    toast("文档同步失败", "error");
+  }
 }
 
 function renderDocuments() {
-  els.documentList.innerHTML = "";
+  const chunkTotal = state.documents.reduce((sum, doc) => sum + Number(doc.chunkCount || 0), 0);
   els.documentCountText.textContent = String(state.documents.length);
+  els.chunkTotalText.textContent = String(chunkTotal);
+  els.documentList.innerHTML = "";
 
   if (state.documents.length === 0) {
-    els.documentList.innerHTML = '<div class="empty-state">暂无文档。上传 txt、md 或 pdf 后会出现在这里。</div>';
-    renderSelectedDocument();
+    els.documentList.innerHTML = '<div class="empty-state">暂无文档，请先上传。</div>';
     return;
   }
 
   for (const doc of state.documents) {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = doc.documentId === state.selectedDocumentId
-      ? "document-item selected"
-      : "document-item";
+    const item = document.createElement("article");
+    item.className = doc.documentId === state.selectedDocumentId ? "document-item selected" : "document-item";
     item.innerHTML = `
-      <span class="doc-name">${escapeHtml(doc.fileName)}</span>
-      <span class="doc-meta">
-        <span>${escapeHtml(doc.fileType || "-")}</span>
-        <span>${escapeHtml(doc.contentLength ?? "-")} chars</span>
-      </span>
-      <span class="doc-id">${escapeHtml(doc.documentId)}</span>
-      <span class="doc-time">${escapeHtml(formatDateTime(doc.uploadTime))}</span>
+      <button class="document-main" type="button">
+        <strong>${escapeHtml(doc.fileName)}</strong>
+        <span>${escapeHtml(doc.fileType || "-")} · chunks ${escapeHtml(doc.chunkCount ?? 0)} · ${escapeHtml(formatDateTime(doc.createdAt || doc.uploadTime))}</span>
+      </button>
+      <div class="document-actions">
+        <button class="ghost-button detail-btn" type="button">详情</button>
+        <button class="ghost-button danger delete-btn" type="button">删除</button>
+      </div>
     `;
-    item.addEventListener("click", () => selectDocument(doc.documentId));
+    item.querySelector(".document-main").addEventListener("click", () => selectDocument(doc.documentId));
+    item.querySelector(".detail-btn").addEventListener("click", () => loadDocumentDetail(doc.documentId));
+    item.querySelector(".delete-btn").addEventListener("click", () => deleteDocument(doc.documentId, doc.fileName));
     els.documentList.appendChild(item);
-  }
-
-  renderSelectedDocument();
-}
-
-function renderSelectedDocument() {
-  const doc = currentDocument();
-
-  if (!doc) {
-    els.selectedDocumentCard.className = "selected-document empty";
-    els.selectedDocumentCard.textContent = "尚未选择文档";
-    els.activeDocumentText.textContent = modeMeta[state.mode].activeText;
-    return;
-  }
-
-  els.selectedDocumentCard.className = "selected-document";
-  els.selectedDocumentCard.innerHTML = `
-    <strong>${escapeHtml(doc.fileName)}</strong>
-    <span>${escapeHtml(doc.fileType || "-")} · ${escapeHtml(doc.contentLength ?? "-")} chars</span>
-    <code>${escapeHtml(doc.documentId)}</code>
-  `;
-
-  if (state.mode === "single") {
-    els.activeDocumentText.textContent = `当前文档：${doc.fileName}`;
-  } else if (state.mode === "global") {
-    els.activeDocumentText.textContent = `已选：${doc.fileName}，全局模式会检索全部文档`;
-  } else {
-    els.activeDocumentText.textContent = "普通聊天不会读取文档";
   }
 }
 
 function selectDocument(documentId) {
   state.selectedDocumentId = documentId;
   renderDocuments();
-  setStatus(els.documentStatus, "已切换当前选中文档。", "success");
+  updateModeText();
 }
 
-function currentSessionId() {
-  const sessionId = els.sessionIdInput.value.trim() || "default";
-  state.sessionId = sessionId;
-  return sessionId;
-}
-
-async function loadDocuments() {
-  setStatus(els.documentStatus, "正在同步文档列表...", "loading");
+async function loadDocumentDetail(documentId) {
   try {
-    const docs = await requestJson("/api/documents");
-    state.documents = Array.isArray(docs) ? docs : [];
-
-    if (state.selectedDocumentId && !state.documents.some((doc) => doc.documentId === state.selectedDocumentId)) {
-      state.selectedDocumentId = null;
-    }
-
+    const detail = await requestJson(`/api/documents/${encodeURIComponent(documentId)}`);
+    state.selectedDocumentId = documentId;
     renderDocuments();
-    setStatus(els.documentStatus, `已同步 ${state.documents.length} 个文档。`, "success");
+    els.detailTitle.textContent = detail.fileName || documentId;
+    els.detailMeta.textContent = `${detail.fileType || "-"} · chunks ${detail.chunkCount ?? 0} · updated ${formatDateTime(detail.updatedAt)}`;
+    els.documentDetail.className = "detail-box";
+    els.documentDetail.innerHTML = `
+      <p>${escapeHtml(detail.contentPreview || "")}</p>
+      <div class="brief-list">
+        ${(detail.chunks || []).map((chunk) => `
+          <article class="brief-item">
+            <strong>#${escapeHtml(chunk.chunkIndex)}</strong>
+            <span>dim ${escapeHtml(chunk.embeddingDimension ?? 0)}</span>
+            <p>${escapeHtml(chunk.contentPreview || "")}</p>
+          </article>
+        `).join("")}
+      </div>
+    `;
+    updateModeText();
   } catch (error) {
-    setStatus(els.documentStatus, `同步失败：${error.message}`, "error");
+    toast(`详情读取失败：${error.message}`, "error");
   }
+}
+
+async function deleteDocument(documentId, fileName) {
+  if (!window.confirm(`确认删除文档「${fileName}」？该操作会同步删除 chunks 和内存索引。`)) {
+    return;
+  }
+  try {
+    await requestJson(`/api/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" });
+    if (state.selectedDocumentId === documentId) {
+      state.selectedDocumentId = null;
+      clearDocumentDetail();
+    }
+    await loadDocuments();
+    toast("文档已删除");
+  } catch (error) {
+    toast(`删除失败：${error.message}`, "error");
+  }
+}
+
+function clearDocumentDetail() {
+  els.detailTitle.textContent = "未选择文档";
+  els.detailMeta.textContent = "查看文档详情后会显示 chunks 摘要";
+  els.documentDetail.className = "detail-box empty-state";
+  els.documentDetail.textContent = "点击文档列表中的“详情”查看 contentPreview 和 chunk 摘要。";
 }
 
 async function uploadDocument() {
   const file = els.fileInput.files[0];
   if (!file) {
-    setStatus(els.uploadStatus, "请先选择一个 txt、md 或 pdf 文件。", "error");
+    toast("请先选择文件", "error");
     return;
   }
-
   const formData = new FormData();
   formData.append("file", file);
-
-  setBusy(els.uploadBtn, true, "索引中...");
-  setStatus(els.uploadStatus, "正在上传并生成可检索文本块...", "loading");
-  els.uploadResult.classList.add("hidden");
-  els.uploadResult.innerHTML = "";
-
+  setBusy(els.uploadBtn, true, "索引中");
+  setStatus(els.uploadStatus, "正在上传并生成 embedding...", "loading");
   try {
-    const result = await requestJson("/api/documents/upload", {
-      method: "POST",
-      body: formData
-    });
-
-    els.uploadResult.innerHTML = `
-      <strong>上传成功</strong>
-      <span>${escapeHtml(result.fileName)}</span>
-      <code>${escapeHtml(result.documentId)}</code>
-    `;
-    els.uploadResult.classList.remove("hidden");
-    setStatus(els.uploadStatus, "上传成功，文档列表已刷新。", "success");
+    const result = await requestJson("/api/documents/upload", { method: "POST", body: formData });
+    state.selectedDocumentId = result.documentId;
     els.fileInput.value = "";
     els.fileNameText.textContent = "选择知识库文件";
-    state.selectedDocumentId = result.documentId;
     await loadDocuments();
+    await loadDocumentDetail(result.documentId);
+    toast("上传成功");
+    setStatus(els.uploadStatus, "上传成功，知识库已刷新。", "success");
   } catch (error) {
     setStatus(els.uploadStatus, `上传失败：${error.message}`, "error");
+    toast(`上传失败：${error.message}`, "error");
   } finally {
     setBusy(els.uploadBtn, false, "上传并索引");
   }
 }
 
-function buildAskRequest(question) {
-  if (state.mode === "single") {
-    return {
-      url: "/api/knowledge/ask",
-      body: { documentId: state.selectedDocumentId, question }
-    };
+async function loadSessions() {
+  try {
+    const sessions = await requestJson("/api/chat/sessions");
+    renderSessions(Array.isArray(sessions) ? sessions : []);
+  } catch (error) {
+    els.sessionList.innerHTML = '<div class="empty-state">暂无会话列表。</div>';
   }
+}
 
-  if (state.mode === "global") {
-    return {
-      url: "/api/knowledge/ask-global",
-      body: { sessionId: currentSessionId(), question }
-    };
+function renderSessions(sessions) {
+  if (sessions.length === 0) {
+    els.sessionList.innerHTML = '<div class="empty-state">暂无历史会话。</div>';
+    return;
   }
-
-  return {
-    url: "/api/chat",
-    body: { sessionId: currentSessionId(), message: question }
-  };
+  els.sessionList.innerHTML = sessions.map((session) => `
+    <button class="session-item" type="button" data-session="${escapeHtml(session.sessionId)}">
+      <strong>${escapeHtml(session.sessionId)}</strong>
+      <span>${escapeHtml(session.messageCount ?? 0)} messages · ${escapeHtml(formatDateTime(session.lastMessageAt))}</span>
+    </button>
+  `).join("");
+  els.sessionList.querySelectorAll(".session-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      els.sessionIdInput.value = item.dataset.session;
+      currentSessionId();
+      toast("已切换会话");
+    });
+  });
 }
 
 async function clearMemory() {
   const sessionId = currentSessionId();
-  setBusy(els.clearMemoryBtn, true, "清空中...");
-  setStatus(els.askStatus, `正在清空 session ${sessionId} 的记忆...`, "loading");
-
   try {
-    await requestJson(`/api/chat/memory/${encodeURIComponent(sessionId)}`, {
-      method: "DELETE"
-    });
-    setStatus(els.askStatus, `已清空 session ${sessionId} 的记忆。`, "success");
+    await requestJson(`/api/chat/memory/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+    await loadSessions();
+    toast("会话记忆已清空");
   } catch (error) {
-    setStatus(els.askStatus, `清空失败：${error.message}`, "error");
-  } finally {
-    setBusy(els.clearMemoryBtn, false, "清空记忆");
+    toast(`清空失败：${error.message}`, "error");
   }
 }
 
-async function askKnowledge() {
-  const question = els.questionInput.value.trim();
-  if (!question) {
-    setStatus(els.askStatus, "请输入问题。", "error");
-    return;
-  }
+function newSession() {
+  const id = `session-${Date.now().toString(36)}`;
+  els.sessionIdInput.value = id;
+  currentSessionId();
+  toast("已创建本地会话 ID");
+}
 
+function updateMode(mode) {
+  state.mode = mode;
+  for (const [name, button] of Object.entries(modeButtons)) {
+    button.classList.toggle("active", name === mode);
+  }
+  updateModeText();
+}
+
+function updateModeText() {
+  const doc = selectedDocument();
+  if (state.mode === "single") {
+    els.activeContextText.textContent = doc ? `单文档 RAG：${doc.fileName}` : "单文档 RAG 需要先选择文档。";
+  } else if (state.mode === "global") {
+    els.activeContextText.textContent = "全局 RAG 会检索全部已索引文档。";
+  } else {
+    els.activeContextText.textContent = "普通聊天只调用 generation provider，不检索知识库。";
+  }
+}
+
+function buildAskRequest(question) {
+  if (state.mode === "single") {
+    return { url: "/api/knowledge/ask", body: { documentId: state.selectedDocumentId, question } };
+  }
+  if (state.mode === "global") {
+    return { url: "/api/knowledge/ask-global", body: { sessionId: currentSessionId(), question } };
+  }
+  return { url: "/api/chat", body: { sessionId: currentSessionId(), message: question } };
+}
+
+async function ask() {
+  const question = els.questionInput.value.trim();
+  if (!question || state.sending) return;
   if (state.mode === "single" && !state.selectedDocumentId) {
-    setStatus(els.askStatus, "单文档问答需要先在左侧选择文档。", "error");
+    toast("请先选择一个文档", "error");
     return;
   }
 
   const request = buildAskRequest(question);
-
-  setBusy(els.askBtn, true, "生成中...");
-  setStatus(els.askStatus, modeMeta[state.mode].loading, "loading");
-  renderAnswer(null);
+  state.sending = true;
+  setBusy(els.askBtn, true, "生成中");
+  setStatus(els.askStatus, "正在生成回答...", "loading");
+  appendMessage("user", question);
+  els.questionInput.value = "";
   renderChunks([]);
-  els.modelText.textContent = "model: -";
 
   try {
     const result = await requestJson(request.url, {
@@ -337,85 +382,77 @@ async function askKnowledge() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request.body)
     });
-
-    const chunks = Array.isArray(result.retrievedChunks) ? result.retrievedChunks : [];
-    renderAnswer(result.reply || "");
-    renderChunks(chunks);
-    els.modelText.textContent = `model: ${result.model || "-"}`;
-    setStatus(
-      els.askStatus,
-      state.mode === "chat" ? "聊天回答完成。" : `回答完成，命中 ${chunks.length} 个片段。`,
-      "success"
-    );
+    appendMessage("assistant", result.reply || "", result.model);
+    renderChunks(Array.isArray(result.retrievedChunks) ? result.retrievedChunks : []);
+    await loadSessions();
+    setStatus(els.askStatus, "回答完成。", "success");
+    toast("回答完成");
   } catch (error) {
-    const message = error.message.includes("当前没有任何可检索文档")
+    const friendly = error.message.includes("当前没有任何可检索文档")
       ? "请先上传文档，再使用全局知识库问答。"
-      : `请求失败：${error.message}`;
-    setStatus(els.askStatus, message, "error");
-    els.answerBox.className = "answer-box empty";
-    els.answerBox.textContent = message;
+      : error.message;
+    appendMessage("assistant", friendly, "error");
+    setStatus(els.askStatus, `请求失败：${friendly}`, "error");
+    toast(friendly, "error");
   } finally {
-    setBusy(els.askBtn, false, "发送问题");
+    state.sending = false;
+    setBusy(els.askBtn, false, "发送");
   }
 }
 
-function renderAnswer(reply) {
-  if (reply === null) {
-    els.answerBox.className = "answer-box empty";
-    els.answerBox.textContent = "等待模型生成回答...";
-    return;
+function appendMessage(role, content, model = "") {
+  if (els.messageList.querySelector(".empty-state")) {
+    els.messageList.innerHTML = "";
   }
-
-  if (!reply) {
-    els.answerBox.className = "answer-box empty";
-    els.answerBox.textContent = "AI 回答会显示在这里。";
-    return;
-  }
-
-  els.answerBox.className = "answer-box";
-  els.answerBox.innerHTML = escapeHtml(reply);
+  const item = document.createElement("article");
+  item.className = `message ${role}`;
+  item.innerHTML = `
+    <div class="message-role">${role === "user" ? "USER" : "AI"} ${model ? `<span>${escapeHtml(model)}</span>` : ""}</div>
+    <p>${escapeHtml(content)}</p>
+  `;
+  els.messageList.appendChild(item);
+  els.messageList.scrollTop = els.messageList.scrollHeight;
 }
 
 function renderChunks(chunks) {
-  els.chunkCountText.textContent = `chunks: ${chunks.length}`;
-
-  if (chunks.length === 0) {
-    els.chunksList.innerHTML = '<div class="empty-state">暂无检索片段。</div>';
+  if (!chunks || chunks.length === 0) {
+    els.chunksList.innerHTML = "";
     return;
   }
-
   els.chunksList.innerHTML = chunks.map((chunk) => `
     <article class="chunk-card">
-      <div class="chunk-topline">
+      <div>
         <strong>${escapeHtml(chunk.fileName || "-")}</strong>
-        <span>${formatScore(chunk.score)}</span>
+        <span>score ${formatScore(chunk.score)}</span>
       </div>
       <p>${escapeHtml(chunk.contentPreview || "")}</p>
-      <div class="chunk-meta">
-        <span>chunk ${escapeHtml(chunk.chunkIndex ?? "-")}</span>
-        <code>${escapeHtml(chunk.documentId || "-")}</code>
-      </div>
     </article>
   `).join("");
 }
 
+async function refreshAll() {
+  await Promise.all([loadProvider(), loadDocuments(), loadSessions()]);
+}
+
+els.applyProviderBtn.addEventListener("click", switchProvider);
+els.refreshAllBtn.addEventListener("click", refreshAll);
+els.refreshDocumentsBtn.addEventListener("click", loadDocuments);
+els.uploadBtn.addEventListener("click", uploadDocument);
 els.fileInput.addEventListener("change", () => {
   const file = els.fileInput.files[0];
   els.fileNameText.textContent = file ? file.name : "选择知识库文件";
 });
-els.refreshDocumentsBtn.addEventListener("click", loadDocuments);
-els.uploadBtn.addEventListener("click", uploadDocument);
-els.singleModeBtn.addEventListener("click", () => updateMode("single"));
-els.globalModeBtn.addEventListener("click", () => updateMode("global"));
-els.chatModeBtn.addEventListener("click", () => updateMode("chat"));
 els.sessionIdInput.addEventListener("input", currentSessionId);
+els.newSessionBtn.addEventListener("click", newSession);
 els.clearMemoryBtn.addEventListener("click", clearMemory);
-els.askBtn.addEventListener("click", askKnowledge);
+els.globalModeBtn.addEventListener("click", () => updateMode("global"));
+els.singleModeBtn.addEventListener("click", () => updateMode("single"));
+els.chatModeBtn.addEventListener("click", () => updateMode("chat"));
+els.askBtn.addEventListener("click", ask);
 els.questionInput.addEventListener("keydown", (event) => {
-  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-    askKnowledge();
-  }
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") ask();
 });
 
-updateMode("single");
-loadDocuments();
+currentSessionId();
+updateMode("global");
+refreshAll();

@@ -1,6 +1,7 @@
 package com.example.localai.service;
 
 import com.example.localai.model.ChatMessage;
+import com.example.localai.dto.ChatSessionResponse;
 
 import java.util.List;
 
@@ -19,4 +20,6 @@ public interface ConversationMemoryService {
     int historyTurns(String sessionId);
 
     String formatHistory(List<ChatMessage> messages);
+
+    List<ChatSessionResponse> listSessions();
 }

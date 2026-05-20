@@ -31,6 +31,11 @@ public class RetrievalServiceImpl implements RetrievalService {
     }
 
     @Override
+    public void deleteDocumentChunks(String documentId) {
+        documentChunkStore.remove(documentId);
+    }
+
+    @Override
     public List<DocumentChunk> retrieve(String documentId, String question, List<Double> queryEmbedding, int topK) {
         List<DocumentChunk> chunks = documentChunkStore.get(documentId);
         if (chunks == null || chunks.isEmpty()) {

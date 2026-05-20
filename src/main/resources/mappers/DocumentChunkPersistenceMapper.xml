@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.localai.mapper.DocumentChunkPersistenceMapper">
+    <resultMap id="DocumentChunkMap" type="com.example.localai.model.DocumentChunk">
+        <id property="chunkId" column="id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="chunkIndex" column="chunk_index"/>
+        <result property="content" column="content"/>
+        <result property="embeddingJson" column="embedding_json"/>
+    </resultMap>
+
+    <delete id="deleteByDocumentId" parameterType="string">
+        DELETE FROM document_chunks
+        WHERE document_id = #{documentId}
+    </delete>
+
+    <insert id="insertBatch">
+        INSERT INTO document_chunks (
+            id,
+            document_id,
+            file_name,
+            chunk_index,
+            content,
+            embedding_json,
+            created_at
+        )
+        VALUES
+        <foreach collection="chunks" item="chunk" separator=",">
+            (
+                #{chunk.chunkId},
+                #{chunk.documentId},
+                #{chunk.fileName},
+                #{chunk.chunkIndex},
+                #{chunk.content},
+                #{chunk.embeddingJson},
+                NOW()
+            )
+        </foreach>
+    </insert>
+
+    <select id="findAll" resultMap="DocumentChunkMap">
+        SELECT
+            id,
+            document_id,
+            file_name,
+            chunk_index,
+            content,
+            embedding_json
+        FROM document_chunks
+        ORDER BY document_id, chunk_index
+    </select>
+
+    <select id="findByDocumentId" resultMap="DocumentChunkMap">
+        SELECT
+            id,
+            document_id,
+            file_name,
+            chunk_index,
+            content,
+            embedding_json
+        FROM document_chunks
+        WHERE document_id = #{documentId}
+        ORDER BY chunk_index
+    </select>
+
+    <select id="countByDocumentId" resultType="int">
+        SELECT COUNT(*)
+        FROM document_chunks
+        WHERE document_id = #{documentId}
+    </select>
+</mapper>

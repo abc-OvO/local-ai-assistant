@@ -15,10 +15,13 @@ public class KimiChatCompletionRequest {
 
     private List<Message> messages;
 
+    private Thinking thinking;
+
     public static KimiChatCompletionRequest of(String model, String prompt) {
         return new KimiChatCompletionRequest(
                 model,
-                List.of(new Message("user", prompt))
+                List.of(new Message("user", prompt)),
+                new Thinking("disabled")
         );
     }
 
@@ -30,5 +33,13 @@ public class KimiChatCompletionRequest {
         private String role;
 
         private String content;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Thinking {
+
+        private String type;
     }
 }

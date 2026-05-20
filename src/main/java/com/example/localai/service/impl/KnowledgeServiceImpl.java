@@ -94,7 +94,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         );
         String prompt = buildGlobalPrompt(history, context, question);
 
-        System.out.println("[KnowledgeAskGlobal] question=" + question
+        System.out.println("[KnowledgeAskGlobal] questionLength=" + question.length()
                 + ", sessionId=" + normalizedSessionId
                 + ", retrievedChunks=" + retrievedChunks.size()
                 + ", contextLength=" + context.length()

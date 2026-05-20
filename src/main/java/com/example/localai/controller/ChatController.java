@@ -4,6 +4,7 @@ import com.example.localai.common.Result;
 import com.example.localai.dto.ChatMemoryResponse;
 import com.example.localai.dto.ChatRequest;
 import com.example.localai.dto.ChatResponse;
+import com.example.localai.dto.ChatSessionResponse;
 import com.example.localai.dto.ClearMemoryResponse;
 import com.example.localai.service.ChatService;
 import com.example.localai.service.ConversationMemoryService;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -50,5 +53,10 @@ public class ChatController {
                 conversationMemoryService.historyTurns(normalizedSessionId),
                 messages
         ));
+    }
+
+    @GetMapping("/chat/sessions")
+    public Result<List<ChatSessionResponse>> listSessions() {
+        return Result.success(conversationMemoryService.listSessions());
     }
 }

@@ -40,6 +40,7 @@
 | Document Parsing | Apache PDFBox, plain text parser, markdown parser |
 | Embedding | Ollama `nomic-embed-text` |
 | Vector Index | In-memory chunk embedding index |
+| Persistence | MySQL + MyBatis |
 | Retrieval | Cosine similarity + keyword boost |
 | Generation Provider | Kimi API |
 | Provider Routing | `AiChatClient`, `AiChatClientRouter` |
@@ -128,11 +129,11 @@ ollama:
   base-url: http://localhost:11434
   embedding-model: nomic-embed-text
   connect-timeout: 3s
-  read-timeout: 300s
+  read-timeout: 60s
 
 kimi:
-  base-url: https://api.moonshot.cn/v1
-  api-key: ${MOONSHOT_API_KEY:${KIMI_API_KEY:}}
+  base-url: https://api.moonshot.ai/v1
+  api-key: ${MOONSHOT_API_KEY:}
   model: kimi-k2.6
 
 app:
@@ -333,9 +334,55 @@ curl -X POST "http://localhost:8080/api/knowledge/ask-global" \
 - 一轮对话包含一条 user 消息和一条 assistant 消息。
 - RAG 检索阶段仍只使用当前问题做 embedding，避免历史污染检索结果。
 - RAG 生成阶段会结合最近历史对话和当前检索到的 `retrievedChunks`。
-- 应用重启后，会话记忆和内存向量索引都会丢失。
-- 当前上传文件会保存到 `data/uploads`，但服务重启后不会自动重建内存索引，需要重新上传文档。
-- 未来可升级为 MySQL 持久化 `chat_history`，并通过数据库持久化和启动重建索引优化重启后的可用性。
+- 会话历史会写入 MySQL `chat_history`；应用重启后可从数据库恢复最近 N 轮历史。
+- RAG 文档元数据和 chunks 会写入 MySQL；应用启动时会从 `document_chunks.embedding_json` 重建内存向量索引。
+- 当前仍使用内存向量索引执行检索，没有引入向量数据库。
+- 如果 MySQL 未启动或未初始化表结构，应用启动或接口调用会报错；请先创建数据库并执行 `sql/init.sql`。
+- 未来可升级为向量数据库或在 MySQL 中增加更完整的索引重建/迁移机制。
+
+## MySQL 持久化
+
+v1.2 使用 MySQL + MyBatis 保存文档、chunks 和会话历史。数据库密码通过环境变量传入，不要写入配置文件或提交到 Git。
+
+创建数据库：
+
+```sql
+CREATE DATABASE local_ai_assistant DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+初始化表：
+
+```bash
+mysql -uroot -p local_ai_assistant < sql/init.sql
+```
+
+主要配置：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/local_ai_assistant?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis:
+  mapper-locations: classpath:mappers/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+```
+
+启动时会自动读取 `documents` 和 `document_chunks`，解析 `embedding_json` 并重建内存向量索引。日志示例：
+
+```text
+[VectorIndexBootstrap] loadedDocuments=1, loadedChunks=3
+```
+
+如果数据库为空，会正常启动并输出：
+
+```text
+[VectorIndexBootstrap] no persisted chunks found, loadedDocuments=0, loadedChunks=0
+```
 
 ### 普通聊天连续对话
 
@@ -417,10 +464,118 @@ http://localhost:8080/index.html
 控制台能力：
 
 - 上传并索引文档
-- 查看文档列表
-- 切换单文档问答和全局问答
-- 输入问题并查看模型回答
-- 查看 `retrievedChunks`、相似度分数和内容预览
+- 查看文档列表、chunk 数量、文档详情和 chunk 摘要
+- 删除文档，并同步删除 MySQL 记录和内存向量索引
+- 查看 generation provider / embedding provider / embedding model
+- 运行时切换 generation provider：`kimi` / `ollama`
+- 管理 `sessionId`、清空会话记忆、查看历史 session
+- 切换单文档 RAG、全局 RAG 和普通聊天
+- 通过气泡式消息查看用户问题和 AI 回答
+- 查看 RAG `retrievedChunks`、相似度分数和内容预览
+
+## v1.3 产品化增强
+
+v1.3 聚焦演示体验和工程化完整性，不做用户系统，不做登录注册。这个项目的重点是 RAG pipeline、provider 架构、本地 embedding、检索可解释性和 AI 工程化，而不是后台管理系统。
+
+新增能力：
+
+- 文档详情查看：展示 `contentPreview`、chunk 摘要和 `embeddingDimension`，不返回完整 embedding JSON。
+- 文档删除：删除 `documents`、`document_chunks`、内存向量索引，并尽量删除 `data/uploads` 中的源文件。
+- Provider 状态查看：展示当前 generation provider、embedding provider 和 embedding model。
+- Provider 运行时切换：只影响最终回答生成，embedding 始终由本地 Ollama `nomic-embed-text` 负责。
+- 会话管理：查看/清空指定 `sessionId` 的记忆，并列出数据库中出现过的 session。
+- 前端产品化控制台：顶部状态栏、provider 切换、文档详情/删除、会话列表、聊天气泡、toast、loading 和 retrievedChunks 展示。
+
+### v1.3 接口
+
+#### Provider 状态
+
+```http
+GET /api/settings/provider
+```
+
+响应字段：
+
+- `currentProvider`
+- `availableProviders`
+- `generationProvider`
+- `embeddingProvider`
+- `embeddingModel`
+
+#### Provider 切换
+
+```http
+POST /api/settings/provider
+Content-Type: application/json
+
+{
+  "provider": "kimi"
+}
+```
+
+仅允许 `kimi` / `ollama`。非法 provider 会返回清晰业务错误。
+
+#### 文档详情
+
+```http
+GET /api/documents/{documentId}
+```
+
+返回：
+
+- `documentId`
+- `fileName`
+- `fileType`
+- `contentPreview`
+- `chunkCount`
+- `createdAt`
+- `updatedAt`
+- `chunks[]`：`chunkId`、`chunkIndex`、`contentPreview`、`embeddingDimension`
+
+#### 删除文档
+
+```http
+DELETE /api/documents/{documentId}
+```
+
+删除文档会同步删除数据库记录和内存索引。源文件不存在时不会导致接口失败。
+
+#### 会话列表
+
+```http
+GET /api/chat/sessions
+```
+
+返回：
+
+- `sessionId`
+- `messageCount`
+- `lastMessageAt`
+
+### v1.3 推荐配置
+
+```yaml
+ai:
+  provider: kimi
+
+ollama:
+  base-url: http://localhost:11434
+  embedding-model: nomic-embed-text
+  connect-timeout: 3s
+  read-timeout: 60s
+
+kimi:
+  base-url: https://api.moonshot.ai/v1
+  api-key: ${MOONSHOT_API_KEY:}
+  model: kimi-k2.6
+```
+
+启动示例：
+
+```bash
+mvn spring-boot:run \
+  -Dspring-boot.run.arguments="--ai.provider=kimi --ollama.base-url=http://localhost:11434"
+```
 
 ## 项目结构
 
@@ -441,9 +596,10 @@ src/main/resources
 
 ## 当前限制
 
-- 文档元数据和 chunk embedding 当前保存在内存中，应用重启后会丢失。
-- 上传文件保存到 `data/uploads`，但当前不会自动从历史文件重建向量索引。
-- 当前内存向量索引适合本地演示和小规模知识库。
+- 文档元数据、chunk、embedding JSON 和会话历史当前保存在 MySQL。
+- 应用启动时会从 MySQL 重建内存向量索引；检索阶段仍使用内存索引。
+- 上传文件保存到 `data/uploads`，数据库中会记录文件路径和原始文本。
+- 当前内存向量索引适合本地演示和小规模知识库，不适合大规模生产检索。
 - 生产环境建议增加鉴权、持久化存储和向量数据库。
 
 ## 后续规划

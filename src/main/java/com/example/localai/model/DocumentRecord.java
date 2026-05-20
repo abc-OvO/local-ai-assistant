@@ -24,4 +24,25 @@ public class DocumentRecord {
     private String savedPath;
 
     private String content;
+
+    private LocalDateTime updatedAt;
+
+    public DocumentRecord(
+            String documentId,
+            String fileName,
+            String fileType,
+            Integer contentLength,
+            LocalDateTime uploadTime,
+            String savedPath,
+            String content
+    ) {
+        this.documentId = documentId;
+        this.fileName = fileName;
+        this.fileType = fileType;
+        this.contentLength = contentLength;
+        this.uploadTime = uploadTime;
+        this.savedPath = savedPath;
+        this.content = content;
+        this.updatedAt = uploadTime;
+    }
 }

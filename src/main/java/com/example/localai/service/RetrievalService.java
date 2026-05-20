@@ -8,6 +8,8 @@ public interface RetrievalService {
 
     void saveDocumentChunks(String documentId, List<DocumentChunk> chunks);
 
+    void deleteDocumentChunks(String documentId);
+
     List<DocumentChunk> retrieve(String documentId, String question, List<Double> queryEmbedding, int topK);
 
     List<DocumentChunk> retrieveGlobal(String question, List<Double> queryEmbedding, int topK);

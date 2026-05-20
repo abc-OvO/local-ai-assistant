@@ -1,10 +1,13 @@
 package com.example.localai.service.impl;
 
 import com.example.localai.config.AppProperties;
+import com.example.localai.dto.ChatSessionResponse;
+import com.example.localai.mapper.ChatHistoryMapper;
 import com.example.localai.model.ChatMessage;
 import com.example.localai.service.ConversationMemoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -23,6 +26,8 @@ public class ConversationMemoryServiceImpl implements ConversationMemoryService 
 
     private final AppProperties appProperties;
 
+    private final ChatHistoryMapper chatHistoryMapper;
+
     private final Map<String, Deque<ChatMessage>> memory = new ConcurrentHashMap<>();
 
     @Override
@@ -39,34 +44,40 @@ public class ConversationMemoryServiceImpl implements ConversationMemoryService 
             return List.of();
         }
 
-        Deque<ChatMessage> messages = memory.get(normalizeSessionId(sessionId));
-        if (messages == null) {
+        String normalizedSessionId = normalizeSessionId(sessionId);
+        int maxMessages = maxMessages();
+        if (maxMessages <= 0) {
             return List.of();
         }
-        synchronized (messages) {
-            return new ArrayList<>(messages);
-        }
+
+        List<ChatMessage> persistedMessages = chatHistoryMapper.findRecentMessages(normalizedSessionId, maxMessages);
+        refreshCache(normalizedSessionId, persistedMessages);
+        return persistedMessages;
     }
 
     @Override
+    @Transactional
     public void appendSuccessfulTurn(String sessionId, String userMessage, String assistantMessage) {
         if (!isEnabled()) {
             return;
         }
 
         String normalizedSessionId = normalizeSessionId(sessionId);
-        Deque<ChatMessage> messages = memory.computeIfAbsent(normalizedSessionId, key -> new ArrayDeque<>());
-        synchronized (messages) {
-            LocalDateTime now = LocalDateTime.now();
-            messages.addLast(new ChatMessage("user", userMessage, now));
-            messages.addLast(new ChatMessage("assistant", assistantMessage, now));
-            trim(messages);
-        }
+        LocalDateTime now = LocalDateTime.now();
+        ChatMessage user = new ChatMessage("user", userMessage, now);
+        ChatMessage assistant = new ChatMessage("assistant", assistantMessage, now);
+
+        chatHistoryMapper.insert(normalizedSessionId, user);
+        chatHistoryMapper.insert(normalizedSessionId, assistant);
+        appendCache(normalizedSessionId, user, assistant);
     }
 
     @Override
+    @Transactional
     public void clear(String sessionId) {
-        memory.remove(normalizeSessionId(sessionId));
+        String normalizedSessionId = normalizeSessionId(sessionId);
+        chatHistoryMapper.deleteBySessionId(normalizedSessionId);
+        memory.remove(normalizedSessionId);
     }
 
     @Override
@@ -97,10 +108,40 @@ public class ConversationMemoryServiceImpl implements ConversationMemoryService 
         return builder.toString().trim();
     }
 
+    @Override
+    public List<ChatSessionResponse> listSessions() {
+        if (!isEnabled()) {
+            return List.of();
+        }
+        return chatHistoryMapper.findSessions();
+    }
+
     private void trim(Deque<ChatMessage> messages) {
-        int maxMessages = Math.max(appProperties.getMemory().getMaxTurns(), 0) * 2;
+        int maxMessages = maxMessages();
         while (messages.size() > maxMessages) {
             messages.removeFirst();
+        }
+    }
+
+    private int maxMessages() {
+        return Math.max(appProperties.getMemory().getMaxTurns(), 0) * 2;
+    }
+
+    private void appendCache(String sessionId, ChatMessage user, ChatMessage assistant) {
+        Deque<ChatMessage> messages = memory.computeIfAbsent(sessionId, key -> new ArrayDeque<>());
+        synchronized (messages) {
+            messages.addLast(user);
+            messages.addLast(assistant);
+            trim(messages);
+        }
+    }
+
+    private void refreshCache(String sessionId, List<ChatMessage> persistedMessages) {
+        Deque<ChatMessage> messages = memory.computeIfAbsent(sessionId, key -> new ArrayDeque<>());
+        synchronized (messages) {
+            messages.clear();
+            messages.addAll(new ArrayList<>(persistedMessages));
+            trim(messages);
         }
     }
 }

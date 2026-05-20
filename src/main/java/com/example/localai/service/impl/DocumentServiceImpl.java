@@ -1,20 +1,26 @@
 package com.example.localai.service.impl;
 
 import com.example.localai.config.AppProperties;
+import com.example.localai.dto.DeleteDocumentResponse;
+import com.example.localai.dto.DocumentDetailResponse;
 import com.example.localai.dto.DocumentSummaryResponse;
 import com.example.localai.dto.DocumentUploadResponse;
 import com.example.localai.exception.BusinessException;
 import com.example.localai.exception.DocumentNotFoundException;
 import com.example.localai.exception.UnsupportedFileTypeException;
+import com.example.localai.mapper.DocumentChunkPersistenceMapper;
+import com.example.localai.mapper.DocumentPersistenceMapper;
 import com.example.localai.model.DocumentChunk;
 import com.example.localai.model.DocumentRecord;
 import com.example.localai.service.ChunkingService;
 import com.example.localai.service.DocumentParser;
 import com.example.localai.service.DocumentService;
 import com.example.localai.service.EmbeddingService;
+import com.example.localai.service.EmbeddingJsonCodec;
 import com.example.localai.service.RetrievalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -43,9 +49,16 @@ public class DocumentServiceImpl implements DocumentService {
 
     private final RetrievalService retrievalService;
 
+    private final DocumentPersistenceMapper documentPersistenceMapper;
+
+    private final DocumentChunkPersistenceMapper documentChunkPersistenceMapper;
+
+    private final EmbeddingJsonCodec embeddingJsonCodec;
+
     private final ConcurrentMap<String, DocumentRecord> documentStore = new ConcurrentHashMap<>();
 
     @Override
+    @Transactional
     public DocumentUploadResponse upload(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(400, "上传文件不能为空");
@@ -83,6 +96,9 @@ public class DocumentServiceImpl implements DocumentService {
             );
 
             List<DocumentChunk> chunks = buildDocumentChunks(documentId, originalFileName, content);
+            documentPersistenceMapper.upsert(record);
+            documentChunkPersistenceMapper.deleteByDocumentId(documentId);
+            documentChunkPersistenceMapper.insertBatch(chunks);
             retrievalService.saveDocumentChunks(documentId, chunks);
 
             documentStore.put(documentId, record);
@@ -105,12 +121,67 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    public DocumentDetailResponse getDocumentDetail(String documentId) {
+        DocumentRecord record = getDocument(documentId);
+        List<DocumentChunk> chunks = documentChunkPersistenceMapper.findByDocumentId(documentId);
+        return new DocumentDetailResponse(
+                record.getDocumentId(),
+                record.getFileName(),
+                record.getFileType(),
+                buildPreview(record.getContent(), 500),
+                chunks.size(),
+                record.getUploadTime(),
+                record.getUpdatedAt() == null ? record.getUploadTime() : record.getUpdatedAt(),
+                chunks.stream()
+                        .map(chunk -> new DocumentDetailResponse.ChunkBrief(
+                                chunk.getChunkId(),
+                                chunk.getChunkIndex(),
+                                buildPreview(chunk.getContent(), 160),
+                                embeddingDimension(chunk)
+                        ))
+                        .toList()
+        );
+    }
+
+    @Override
+    @Transactional
+    public DeleteDocumentResponse deleteDocument(String documentId) {
+        DocumentRecord record = getDocument(documentId);
+
+        documentChunkPersistenceMapper.deleteByDocumentId(documentId);
+        documentPersistenceMapper.deleteByDocumentId(documentId);
+        retrievalService.deleteDocumentChunks(documentId);
+        documentStore.remove(documentId);
+
+        if (StringUtils.hasText(record.getSavedPath())) {
+            try {
+                Files.deleteIfExists(Path.of(record.getSavedPath()));
+            } catch (IOException ex) {
+                System.out.println("[DocumentDelete] upload file delete skipped, documentId=" + documentId
+                        + ", path=" + record.getSavedPath()
+                        + ", error=" + ex.getMessage());
+            }
+        }
+
+        System.out.println("[DocumentDelete] documentId=" + documentId + ", deleted=true");
+        return new DeleteDocumentResponse(documentId, true);
+    }
+
+    @Override
     public DocumentRecord getDocument(String documentId) {
         DocumentRecord record = documentStore.get(documentId);
         if (record == null) {
             throw new DocumentNotFoundException(documentId);
         }
         return record;
+    }
+
+    @Override
+    public void restorePersistedDocuments(List<DocumentRecord> documents) {
+        documentStore.clear();
+        for (DocumentRecord document : documents) {
+            documentStore.put(document.getDocumentId(), document);
+        }
     }
 
     private DocumentParser findParser(String fileType) {
@@ -137,7 +208,7 @@ public class DocumentServiceImpl implements DocumentService {
         return java.util.stream.IntStream.range(0, chunkContents.size())
                 .mapToObj(index -> {
                     String chunkContent = chunkContents.get(index);
-                    return new DocumentChunk(
+                    DocumentChunk chunk = new DocumentChunk(
                             UUID.randomUUID().toString(),
                             documentId,
                             fileName,
@@ -146,6 +217,8 @@ public class DocumentServiceImpl implements DocumentService {
                             embeddingService.embed(chunkContent),
                             null
                     );
+                    chunk.setEmbeddingJson(embeddingJsonCodec.toJson(chunk.getEmbedding()));
+                    return chunk;
                 })
                 .toList();
     }
@@ -165,7 +238,28 @@ public class DocumentServiceImpl implements DocumentService {
                 record.getFileName(),
                 record.getFileType(),
                 record.getContentLength(),
-                record.getUploadTime()
+                record.getUploadTime(),
+                documentChunkPersistenceMapper.countByDocumentId(record.getDocumentId()),
+                record.getUploadTime(),
+                record.getUpdatedAt() == null ? record.getUploadTime() : record.getUpdatedAt()
         );
+    }
+
+    private String buildPreview(String content, int maxLength) {
+        if (content == null) {
+            return "";
+        }
+        int previewLength = Math.min(content.length(), maxLength);
+        return content.substring(0, previewLength);
+    }
+
+    private Integer embeddingDimension(DocumentChunk chunk) {
+        if (chunk.getEmbedding() != null) {
+            return chunk.getEmbedding().size();
+        }
+        if (StringUtils.hasText(chunk.getEmbeddingJson())) {
+            return embeddingJsonCodec.fromJson(chunk.getEmbeddingJson()).size();
+        }
+        return 0;
     }
 }

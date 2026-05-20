@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.localai.mapper.ChatHistoryMapper">
+    <resultMap id="ChatMessageMap" type="com.example.localai.model.ChatMessage">
+        <result property="role" column="role"/>
+        <result property="content" column="content"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert">
+        INSERT INTO chat_history (
+            session_id,
+            role,
+            content,
+            created_at
+        )
+        VALUES (
+            #{sessionId},
+            #{message.role},
+            #{message.content},
+            #{message.createdAt}
+        )
+    </insert>
+
+    <select id="findRecentMessages" resultMap="ChatMessageMap">
+        SELECT role, content, created_at
+        FROM (
+            SELECT role, content, created_at, id
+            FROM chat_history
+            WHERE session_id = #{sessionId}
+            ORDER BY created_at DESC, id DESC
+            LIMIT #{limit}
+        ) recent_messages
+        ORDER BY created_at ASC, id ASC
+    </select>
+
+    <delete id="deleteBySessionId" parameterType="string">
+        DELETE FROM chat_history
+        WHERE session_id = #{sessionId}
+    </delete>
+
+    <select id="findSessions" resultType="com.example.localai.dto.ChatSessionResponse">
+        SELECT
+            session_id AS sessionId,
+            COUNT(*) AS messageCount,
+            MAX(created_at) AS lastMessageAt
+        FROM chat_history
+        GROUP BY session_id
+        ORDER BY lastMessageAt DESC
+    </select>
+</mapper>

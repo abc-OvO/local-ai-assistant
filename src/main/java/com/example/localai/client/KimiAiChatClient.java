@@ -7,6 +7,7 @@ import com.example.localai.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
@@ -24,19 +25,21 @@ public class KimiAiChatClient implements AiChatClient {
     @Override
     public String generate(String prompt) {
         if (!StringUtils.hasText(kimiProperties.getApiKey())) {
-            throw new BusinessException(500, "Kimi API Key 未配置，请设置 kimi.api-key 或环境变量 KIMI_API_KEY");
+            throw new BusinessException(500, "Kimi API Key 未配置，请设置 kimi.api-key 或环境变量 MOONSHOT_API_KEY");
         }
 
         KimiChatCompletionRequest request = KimiChatCompletionRequest.of(kimiProperties.getModel(), prompt);
 
         long start = System.currentTimeMillis();
-        System.out.println("[KimiAiChatClient] request start, model=" + kimiProperties.getModel()
+        System.out.println("[KimiAiChatClient] request start, endpoint=" + kimiProperties.getBaseUrl() + "/chat/completions"
+                + ", model=" + kimiProperties.getModel()
                 + ", promptLength=" + prompt.length());
 
         try {
             KimiChatCompletionResponse response = kimiRestClient.post()
                     .uri("/chat/completions")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + kimiProperties.getApiKey())
+                    .contentType(MediaType.APPLICATION_JSON)
                     .body(request)
                     .retrieve()
                     .onStatus(HttpStatusCode::isError, (req, res) -> {

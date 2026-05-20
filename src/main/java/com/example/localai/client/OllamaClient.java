@@ -6,10 +6,12 @@ import com.example.localai.dto.OllamaEmbeddingResponse;
 import com.example.localai.dto.OllamaGenerateRequest;
 import com.example.localai.dto.OllamaGenerateResponse;
 import com.example.localai.exception.BusinessException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -21,53 +23,66 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OllamaClient {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final RestClient ollamaRestClient;
+
     private final OllamaProperties properties;
 
     public OllamaGenerateResponse generate(String message) {
         OllamaGenerateRequest request = new OllamaGenerateRequest(
                 properties.getModel(),
                 message,
-                false
+                false,
+                buildGenerateOptions()
         );
 
+        String endpoint = properties.effectiveBaseUrl();
         long start = System.currentTimeMillis();
-        System.out.println("[OllamaClient] request start, promptLength=" + message.length());
+        System.out.println("[OllamaClient] generate try, endpoint=" + endpoint
+                + ", model=" + properties.getModel()
+                + ", stream=" + request.getStream()
+                + ", promptLength=" + message.length()
+                + ", options=" + summarizeOptions(request.getOptions()));
 
         try {
             OllamaGenerateResponse response = ollamaRestClient.post()
                     .uri("/api/generate")
+                    .contentType(MediaType.APPLICATION_JSON)
                     .body(request)
-                    .retrieve()
-                    .onStatus(HttpStatusCode::isError, (req, res) -> {
-                        throw new BusinessException(502, "Ollama 调用失败，HTTP 状态码：" + res.getStatusCode().value());
-                    })
-                    .body(OllamaGenerateResponse.class);
+                    .exchange((clientRequest, clientResponse) -> {
+                        HttpStatusCode statusCode = clientResponse.getStatusCode();
+                        if (statusCode.isError()) {
+                            String errorBody = readBody(clientResponse);
+                            throw new BusinessException(502, "Ollama generate 调用失败，HTTP 状态码："
+                                    + statusCode.value() + "，错误信息：" + errorBody);
+                        }
+                        return readGenerateResponse(clientResponse);
+                    });
 
             long cost = System.currentTimeMillis() - start;
-            System.out.println("[OllamaClient] request success, costMs=" + cost);
+            System.out.println("[OllamaClient] generate success, endpoint=" + endpoint
+                    + ", promptLength=" + message.length()
+                    + ", costMs=" + cost);
 
-            if (response == null || !org.springframework.util.StringUtils.hasText(response.getResponse())) {
-                throw new BusinessException(502, "Ollama 返回内容为空");
+            if (response == null || !StringUtils.hasText(response.getResponse())) {
+                throw new BusinessException(502, "Ollama generate 返回内容为空");
             }
             return response;
         } catch (ResourceAccessException ex) {
             long cost = System.currentTimeMillis() - start;
-            System.out.println("[OllamaClient] request failed, costMs=" + cost + ", error=" + ex.getMessage());
-
-            Throwable cause = ex;
-            while (cause != null) {
-                if (cause instanceof java.net.SocketTimeoutException) {
-                    throw new BusinessException(502, "Ollama 响应超时，请稍后重试或适当增大 read-timeout", ex);
-                }
-                cause = cause.getCause();
-            }
-
-            throw new BusinessException(502, "Ollama 服务不可用，请检查地址、网络或 Tailscale 子网路由", ex);
+            System.out.println("[OllamaClient] generate failed, endpoint=" + endpoint
+                    + ", promptLength=" + message.length()
+                    + ", costMs=" + cost
+                    + ", error=" + ex.getMessage());
+            throw new BusinessException(502, "Ollama generate 服务不可用，请检查本地 Ollama 是否启动：" + ex.getMessage(), ex);
         } catch (RestClientException ex) {
             long cost = System.currentTimeMillis() - start;
-            System.out.println("[OllamaClient] request failed, costMs=" + cost + ", error=" + ex.getMessage());
-            throw new BusinessException(502, "调用 Ollama 服务失败：" + ex.getMessage(), ex);
+            System.out.println("[OllamaClient] generate failed, endpoint=" + endpoint
+                    + ", promptLength=" + message.length()
+                    + ", costMs=" + cost
+                    + ", error=" + ex.getMessage());
+            throw new BusinessException(502, "调用 Ollama generate 服务失败：" + ex.getMessage(), ex);
         }
     }
 
@@ -77,8 +92,11 @@ public class OllamaClient {
                 text
         );
 
+        String endpoint = properties.effectiveBaseUrl();
         long start = System.currentTimeMillis();
-        System.out.println("[OllamaClient] embedding start, model=" + properties.getEmbeddingModel()
+        System.out.println("[OllamaClient] embedding try, provider=ollama"
+                + ", endpoint=" + endpoint
+                + ", model=" + properties.getEmbeddingModel()
                 + ", textLength=" + text.length());
 
         try {
@@ -90,10 +108,6 @@ public class OllamaClient {
                         HttpStatusCode statusCode = clientResponse.getStatusCode();
                         if (statusCode.isError()) {
                             String errorBody = readBody(clientResponse);
-                            System.out.println("[OllamaClient] embedding failed, model=" + properties.getEmbeddingModel()
-                                    + ", textLength=" + text.length()
-                                    + ", httpStatus=" + statusCode.value()
-                                    + ", errorBody=" + errorBody);
                             throw new BusinessException(502, "Ollama embedding 调用失败，HTTP 状态码："
                                     + statusCode.value() + "，错误信息：" + errorBody);
                         }
@@ -101,7 +115,8 @@ public class OllamaClient {
                     });
 
             long cost = System.currentTimeMillis() - start;
-            System.out.println("[OllamaClient] embedding success, model=" + properties.getEmbeddingModel()
+            System.out.println("[OllamaClient] embedding success, provider=ollama"
+                    + ", endpoint=" + endpoint
                     + ", textLength=" + text.length()
                     + ", costMs=" + cost);
 
@@ -111,18 +126,46 @@ public class OllamaClient {
             return response.getEmbedding();
         } catch (ResourceAccessException ex) {
             long cost = System.currentTimeMillis() - start;
-            System.out.println("[OllamaClient] embedding failed, model=" + properties.getEmbeddingModel()
+            System.out.println("[OllamaClient] embedding failed, provider=ollama"
+                    + ", endpoint=" + endpoint
                     + ", textLength=" + text.length()
                     + ", costMs=" + cost
                     + ", error=" + ex.getMessage());
-            throw new BusinessException(502, "Ollama embedding 服务不可用，请检查地址、网络或 Tailscale 子网路由", ex);
+            throw new BusinessException(502, "Ollama embedding 服务不可用，请检查本地 Ollama 是否启动：" + ex.getMessage(), ex);
         } catch (RestClientException ex) {
             long cost = System.currentTimeMillis() - start;
-            System.out.println("[OllamaClient] embedding failed, model=" + properties.getEmbeddingModel()
+            System.out.println("[OllamaClient] embedding failed, provider=ollama"
+                    + ", endpoint=" + endpoint
                     + ", textLength=" + text.length()
                     + ", costMs=" + cost
                     + ", error=" + ex.getMessage());
             throw new BusinessException(502, "调用 Ollama embedding 服务失败：" + ex.getMessage(), ex);
+        }
+    }
+
+    private OllamaGenerateRequest.Options buildGenerateOptions() {
+        if (properties.getGenerateNumPredict() == null) {
+            return null;
+        }
+        return new OllamaGenerateRequest.Options(properties.getGenerateNumPredict());
+    }
+
+    private String summarizeOptions(OllamaGenerateRequest.Options options) {
+        if (options == null) {
+            return "{}";
+        }
+        return "{num_predict=" + options.getNumPredict() + "}";
+    }
+
+    private OllamaGenerateResponse readGenerateResponse(org.springframework.http.client.ClientHttpResponse response) {
+        try {
+            byte[] bodyBytes = response.getBody().readAllBytes();
+            if (bodyBytes.length == 0) {
+                return null;
+            }
+            return OBJECT_MAPPER.readValue(bodyBytes, OllamaGenerateResponse.class);
+        } catch (java.io.IOException ex) {
+            throw new BusinessException(502, "解析 Ollama generate 响应失败：" + ex.getMessage(), ex);
         }
     }
 
@@ -132,8 +175,7 @@ public class OllamaClient {
             if (bodyBytes.length == 0) {
                 return null;
             }
-            return new com.fasterxml.jackson.databind.ObjectMapper()
-                    .readValue(bodyBytes, OllamaEmbeddingResponse.class);
+            return OBJECT_MAPPER.readValue(bodyBytes, OllamaEmbeddingResponse.class);
         } catch (java.io.IOException ex) {
             throw new BusinessException(502, "解析 Ollama embedding 响应失败：" + ex.getMessage(), ex);
         }

@@ -1,0 +1,1 @@
+local-ai-assistant 是一个基于 Spring Boot、Ollama、RAG、Embedding 和向量检索的本地知识库问答系统。

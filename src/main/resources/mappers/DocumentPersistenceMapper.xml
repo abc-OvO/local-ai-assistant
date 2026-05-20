@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.localai.mapper.DocumentPersistenceMapper">
+    <resultMap id="DocumentRecordMap" type="com.example.localai.model.DocumentRecord">
+        <id property="documentId" column="id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileType" column="file_type"/>
+        <result property="contentLength" column="content_length"/>
+        <result property="savedPath" column="file_path"/>
+        <result property="content" column="content_text"/>
+        <result property="uploadTime" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <delete id="deleteByDocumentId" parameterType="string">
+        DELETE FROM documents
+        WHERE id = #{documentId}
+    </delete>
+
+    <insert id="upsert" parameterType="com.example.localai.model.DocumentRecord">
+        INSERT INTO documents (
+            id,
+            file_name,
+            file_type,
+            file_path,
+            content_text,
+            created_at,
+            updated_at
+        )
+        VALUES (
+            #{documentId},
+            #{fileName},
+            #{fileType},
+            #{savedPath},
+            #{content},
+            #{uploadTime},
+            NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            file_name = VALUES(file_name),
+            file_type = VALUES(file_type),
+            file_path = VALUES(file_path),
+            content_text = VALUES(content_text),
+            updated_at = NOW()
+    </insert>
+
+    <select id="findAll" resultMap="DocumentRecordMap">
+        SELECT
+            id,
+            file_name,
+            file_type,
+            file_path,
+            content_text,
+            created_at,
+            updated_at,
+            CHAR_LENGTH(content_text) AS content_length
+        FROM documents
+        ORDER BY created_at DESC
+    </select>
+</mapper>
