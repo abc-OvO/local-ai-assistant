@@ -4,6 +4,7 @@ import com.example.localai.config.AiProperties;
 import com.example.localai.config.AppProperties;
 import com.example.localai.config.KimiProperties;
 import com.example.localai.config.OllamaProperties;
+import com.example.localai.config.RagProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -14,7 +15,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 @SpringBootApplication
-@EnableConfigurationProperties({OllamaProperties.class, AppProperties.class, AiProperties.class, KimiProperties.class})
+@EnableConfigurationProperties({OllamaProperties.class, AppProperties.class, AiProperties.class, KimiProperties.class, RagProperties.class})
 public class LocalAiApplication {
 
     public static void main(String[] args) {

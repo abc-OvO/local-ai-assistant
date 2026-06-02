@@ -1,21 +1,26 @@
 package com.example.localai.service.impl;
 
+import com.example.localai.config.RagProperties;
 import com.example.localai.exception.BusinessException;
 import com.example.localai.model.DocumentChunk;
 import com.example.localai.service.RetrievalService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
+@RequiredArgsConstructor
 public class RetrievalServiceImpl implements RetrievalService {
 
     private static final double FILE_NAME_KEYWORD_BOOST = 0.25;
@@ -24,6 +29,8 @@ public class RetrievalServiceImpl implements RetrievalService {
     private static final Pattern ENGLISH_TOKEN_PATTERN = Pattern.compile("[a-zA-Z][a-zA-Z0-9+#.-]*");
 
     private final ConcurrentMap<String, List<DocumentChunk>> documentChunkStore = new ConcurrentHashMap<>();
+
+    private final RagProperties ragProperties;
 
     @Override
     public void saveDocumentChunks(String documentId, List<DocumentChunk> chunks) {
@@ -60,18 +67,85 @@ public class RetrievalServiceImpl implements RetrievalService {
 
     private List<DocumentChunk> scoreAndLimit(List<DocumentChunk> chunks, String question, List<Double> queryEmbedding, int topK) {
         List<String> keywords = extractKeywords(question);
-        return chunks.stream()
+        List<DocumentChunk> scoredChunks = chunks.stream()
                 .map(chunk -> {
                     double vectorScore = cosineSimilarity(queryEmbedding, chunk.getEmbedding());
-                    double keywordBoost = calculateKeywordBoost(chunk, keywords);
-                    return copyWithScore(chunk, vectorScore + keywordBoost);
+                    double keywordScore = ragProperties.getHybrid().isEnabled()
+                            ? calculateKeywordScore(chunk, keywords)
+                            : 0.0;
+                    double finalScore = calculateFinalScore(vectorScore, keywordScore);
+                    return copyWithScores(chunk, vectorScore, keywordScore, finalScore);
                 })
                 .sorted(Comparator.comparing(DocumentChunk::getScore).reversed())
-                .limit(topK)
                 .toList();
+
+        if (!ragProperties.getMmr().isEnabled()) {
+            return distinctByChunkId(scoredChunks).stream()
+                    .limit(topK)
+                    .toList();
+        }
+
+        int candidateSize = Math.max(topK, ragProperties.getMmr().getCandidateSize());
+        return selectByMmr(scoredChunks.stream().limit(candidateSize).toList(), topK);
     }
 
-    private DocumentChunk copyWithScore(DocumentChunk source, double score) {
+    private double calculateFinalScore(double vectorScore, double keywordScore) {
+        if (!ragProperties.getHybrid().isEnabled()) {
+            return vectorScore;
+        }
+        return vectorScore * ragProperties.getHybrid().getVectorWeight()
+                + keywordScore * ragProperties.getHybrid().getKeywordWeight();
+    }
+
+    private List<DocumentChunk> selectByMmr(List<DocumentChunk> candidates, int topK) {
+        List<DocumentChunk> remaining = new ArrayList<>(distinctByChunkId(candidates));
+        List<DocumentChunk> selected = new ArrayList<>();
+        double lambda = ragProperties.getMmr().getLambda();
+
+        while (!remaining.isEmpty() && selected.size() < topK) {
+            DocumentChunk bestChunk = null;
+            double bestScore = Double.NEGATIVE_INFINITY;
+
+            for (DocumentChunk candidate : remaining) {
+                double diversityPenalty = maxSimilarityToSelected(candidate, selected);
+                double mmrScore = lambda * safeScore(candidate.getFinalScore())
+                        - (1.0 - lambda) * diversityPenalty;
+                if (bestChunk == null || mmrScore > bestScore) {
+                    bestChunk = candidate;
+                    bestScore = mmrScore;
+                }
+            }
+
+            selected.add(bestChunk);
+            remaining.remove(bestChunk);
+        }
+
+        return selected;
+    }
+
+    private double maxSimilarityToSelected(DocumentChunk candidate, List<DocumentChunk> selected) {
+        if (selected.isEmpty()) {
+            return 0.0;
+        }
+        return selected.stream()
+                .mapToDouble(chunk -> cosineSimilarity(candidate.getEmbedding(), chunk.getEmbedding()))
+                .max()
+                .orElse(0.0);
+    }
+
+    private List<DocumentChunk> distinctByChunkId(List<DocumentChunk> chunks) {
+        Map<String, DocumentChunk> uniqueChunks = new LinkedHashMap<>();
+        for (DocumentChunk chunk : chunks) {
+            uniqueChunks.putIfAbsent(chunk.getChunkId(), chunk);
+        }
+        return new ArrayList<>(uniqueChunks.values());
+    }
+
+    private double safeScore(Double score) {
+        return score == null ? 0.0 : score;
+    }
+
+    private DocumentChunk copyWithScores(DocumentChunk source, double vectorScore, double keywordScore, double finalScore) {
         return new DocumentChunk(
                 source.getChunkId(),
                 source.getDocumentId(),
@@ -79,7 +153,9 @@ public class RetrievalServiceImpl implements RetrievalService {
                 source.getChunkIndex(),
                 source.getContent(),
                 new ArrayList<>(source.getEmbedding()),
-                score
+                vectorScore,
+                keywordScore,
+                finalScore
         );
     }
 
@@ -123,7 +199,7 @@ public class RetrievalServiceImpl implements RetrievalService {
         return keywords;
     }
 
-    private double calculateKeywordBoost(DocumentChunk chunk, List<String> keywords) {
+    double calculateKeywordScore(DocumentChunk chunk, List<String> keywords) {
         if (keywords.isEmpty()) {
             return 0.0;
         }
@@ -131,19 +207,19 @@ public class RetrievalServiceImpl implements RetrievalService {
         String lowerContent = chunk.getContent() == null ? "" : chunk.getContent().toLowerCase(Locale.ROOT);
         String lowerFileName = chunk.getFileName() == null ? "" : chunk.getFileName().toLowerCase(Locale.ROOT);
 
-        double boost = 0.0;
+        double score = 0.0;
         for (String keyword : keywords) {
             if (lowerContent.contains(keyword)) {
-                boost += CONTENT_KEYWORD_BOOST;
+                score += CONTENT_KEYWORD_BOOST;
             }
             if (lowerFileName.contains(keyword)) {
-                boost += FILE_NAME_KEYWORD_BOOST;
+                score += FILE_NAME_KEYWORD_BOOST;
             }
         }
-        return Math.min(boost, MAX_KEYWORD_BOOST);
+        return Math.min(score, MAX_KEYWORD_BOOST);
     }
 
-    private double cosineSimilarity(List<Double> left, List<Double> right) {
+    double cosineSimilarity(List<Double> left, List<Double> right) {
         if (left == null || right == null || left.isEmpty() || right.isEmpty()) {
             return 0.0;
         }

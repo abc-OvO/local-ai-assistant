@@ -11,6 +11,7 @@ import com.example.localai.service.DocumentService;
 import com.example.localai.service.EmbeddingService;
 import com.example.localai.service.ConversationMemoryService;
 import com.example.localai.service.KnowledgeService;
+import com.example.localai.service.QueryRewriteService;
 import com.example.localai.service.RetrievalService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -36,15 +37,18 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     private final OllamaProperties ollamaProperties;
 
+    private final QueryRewriteService queryRewriteService;
+
     @Override
     public KnowledgeAskResponse ask(String documentId, String question) {
         long start = System.currentTimeMillis();
 
         DocumentRecord document = documentService.getDocument(documentId);
-        List<Double> questionEmbedding = embeddingService.embed(question);
+        String retrievalQuery = queryRewriteService.rewrite(question);
+        List<Double> questionEmbedding = embeddingService.embed(retrievalQuery);
         List<DocumentChunk> retrievedChunks = retrievalService.retrieve(
                 documentId,
-                question,
+                retrievalQuery,
                 questionEmbedding,
                 appProperties.getRetrievalTopK()
         );
@@ -52,7 +56,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         String prompt = buildPrompt(context, question);
 
         System.out.println("[KnowledgeAsk] documentId=" + documentId
-                + ", question=" + question
+                + ", questionLength=" + question.length()
+                + ", retrievalQueryLength=" + retrievalQuery.length()
                 + ", retrievedChunks=" + retrievedChunks.size()
                 + ", contextLength=" + context.length()
                 + ", promptLength=" + prompt.length());
@@ -82,9 +87,10 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         long start = System.currentTimeMillis();
         String normalizedSessionId = conversationMemoryService.normalizeSessionId(sessionId);
 
-        List<Double> questionEmbedding = embeddingService.embed(question);
+        String retrievalQuery = queryRewriteService.rewrite(question);
+        List<Double> questionEmbedding = embeddingService.embed(retrievalQuery);
         List<DocumentChunk> retrievedChunks = retrievalService.retrieveGlobal(
-                question,
+                retrievalQuery,
                 questionEmbedding,
                 appProperties.getRetrievalTopK()
         );
@@ -95,6 +101,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         String prompt = buildGlobalPrompt(history, context, question);
 
         System.out.println("[KnowledgeAskGlobal] questionLength=" + question.length()
+                + ", retrievalQueryLength=" + retrievalQuery.length()
                 + ", sessionId=" + normalizedSessionId
                 + ", retrievedChunks=" + retrievedChunks.size()
                 + ", contextLength=" + context.length()
@@ -111,6 +118,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 + ", historyTurns=" + historyTurns
                 + ", retrievedChunks=" + retrievedChunks.size()
                 + ", promptLength=" + prompt.length()
+                + ", retrievalQueryLength=" + retrievalQuery.length()
                 + ", embeddingProvider=ollama"
                 + ", embeddingModel=" + ollamaProperties.getEmbeddingModel()
                 + ", generationProvider=" + aiChatClientRouter.currentProvider());
@@ -185,6 +193,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                         chunk.getFileName(),
                         chunk.getChunkIndex(),
                         chunk.getScore(),
+                        chunk.getVectorScore(),
+                        chunk.getKeywordScore(),
+                        chunk.getFinalScore(),
                         buildPreview(chunk.getContent())
                 ))
                 .toList();

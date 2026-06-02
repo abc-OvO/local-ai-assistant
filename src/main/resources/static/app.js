@@ -108,6 +108,17 @@ function formatScore(score) {
   return Number.isFinite(value) ? value.toFixed(4) : "-";
 }
 
+function renderScoreLine(chunk) {
+  if (chunk.finalScore == null && chunk.vectorScore == null && chunk.keywordScore == null) {
+    return `<span>score ${formatScore(chunk.score)}</span>`;
+  }
+  return `
+    <span>final ${formatScore(chunk.finalScore ?? chunk.score)}</span>
+    <span>vector ${formatScore(chunk.vectorScore)}</span>
+    <span>keyword ${formatScore(chunk.keywordScore)}</span>
+  `;
+}
+
 function currentSessionId() {
   const sessionId = els.sessionIdInput.value.trim() || "default";
   state.sessionId = sessionId;
@@ -423,7 +434,7 @@ function renderChunks(chunks) {
     <article class="chunk-card">
       <div>
         <strong>${escapeHtml(chunk.fileName || "-")}</strong>
-        <span>score ${formatScore(chunk.score)}</span>
+        ${renderScoreLine(chunk)}
       </div>
       <p>${escapeHtml(chunk.contentPreview || "")}</p>
     </article>

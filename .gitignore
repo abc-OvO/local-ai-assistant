@@ -1,6 +1,9 @@
 # Maven
 target/
 
+# Codex local environment
+.codex/
+
 # IntelliJ IDEA
 .idea/
 *.iml
@@ -10,6 +13,10 @@ target/
 
 # Logs
 *.log
+logs/
+
+# Runtime uploads
+data/uploads/
 
 # Environment
 .env

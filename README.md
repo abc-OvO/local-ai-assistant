@@ -2,7 +2,7 @@
 
 基于 **Spring Boot 3 + Java 17** 的本地多文档 RAG 知识库问答系统。
 
-项目支持上传 `txt`、`md`、`pdf` 文档，自动完成文档解析、chunk 切分、本地 embedding 生成、内存向量索引、余弦相似度检索，并将 Top-K `retrievedChunks` 作为上下文交给生成模型回答问题。
+项目支持上传 `txt`、`md`、`pdf` 文档，自动完成文档解析、chunk 切分、本地 embedding 生成、内存向量索引、Query Rewrite、Hybrid Retrieval、MMR 去重选择，并将 Top-K `retrievedChunks` 作为上下文交给生成模型回答问题。
 
 当前架构中：
 
@@ -20,8 +20,11 @@
 - 基于 `chunk-size` 和 `chunk-overlap` 的 chunk 切分
 - 调用本地 Ollama `nomic-embed-text` 生成 embedding
 - 内存向量索引，保存文档 chunk 与 embedding
+- v1.4 Advanced RAG Retrieval Pipeline：Query Rewrite -> Hybrid Retrieval -> MMR
 - 基于 cosine similarity 的向量检索
-- 关键词增强检索排序：`cosine similarity + keywordBoost`
+- Hybrid Retrieval：`vectorScore + keywordScore -> finalScore`
+- MMR 从候选 Top-N 中选择最终 Top-K，减少重复 chunk
+- `retrievedChunks` 返回 `score`、`vectorScore`、`keywordScore`、`finalScore`
 - 单文档问答：`/api/knowledge/ask`
 - 多文档全局问答：`/api/knowledge/ask-global`
 - 返回 Top-K `retrievedChunks`
@@ -41,7 +44,7 @@
 | Embedding | Ollama `nomic-embed-text` |
 | Vector Index | In-memory chunk embedding index |
 | Persistence | MySQL + MyBatis |
-| Retrieval | Cosine similarity + keyword boost |
+| Retrieval | Query Rewrite + Hybrid Retrieval + MMR |
 | Generation Provider | Kimi API |
 | Provider Routing | `AiChatClient`, `AiChatClientRouter` |
 | Frontend | HTML, CSS, Vanilla JavaScript |
@@ -59,11 +62,14 @@ flowchart LR
     Browser --> AskSingle["POST /api/knowledge/ask"]
     Browser --> AskGlobal["POST /api/knowledge/ask-global"]
 
-    AskSingle --> QueryEmbedding["问题向量化"]
-    AskGlobal --> QueryEmbedding
-    QueryEmbedding --> Retrieval["检索排序<br/>cosine similarity + keywordBoost"]
+    AskSingle --> Rewrite["Query Rewrite<br/>当前 generation provider"]
+    AskGlobal --> Rewrite
+    Rewrite --> QueryEmbedding["检索 query 向量化"]
+    QueryEmbedding --> Retrieval["Hybrid Retrieval<br/>vectorScore + keywordScore"]
     Index --> Retrieval
-    Retrieval --> TopK["Top-K retrievedChunks"]
+    Retrieval --> MMR["MMR<br/>候选 Top-N -> 最终 Top-K"]
+    MMR --> Rerank["Optional Rerank<br/>默认关闭"]
+    Rerank --> TopK["Top-K retrievedChunks"]
     TopK --> Prompt["RAG Prompt 构建"]
     Prompt --> Router["AiChatClientRouter"]
     Router --> Kimi["Kimi API<br/>generation provider"]
@@ -78,13 +84,40 @@ flowchart LR
 3. 文本被切分为带 overlap 的 chunks。
 4. 每个 chunk 调用本地 Ollama `nomic-embed-text` 生成 embedding。
 5. 系统将 chunk、文档信息和 embedding 保存到内存索引。
-6. 用户提问时，问题同样会生成 embedding。
-7. 检索服务计算问题向量和 chunk 向量的 cosine similarity。
-8. 系统根据问题关键词对命中文件名或正文的 chunk 增加 `keywordBoost`。
-9. 取 Top-K chunks 作为 `retrievedChunks`。
-10. 将 retrieved chunks 拼接进 prompt。
-11. 通过 provider router 调用 Kimi API 生成最终回答。
-12. API 返回回答和可追踪的 `retrievedChunks`。
+6. 用户提问时，系统先通过当前 generation provider 做 Query Rewrite，生成更适合检索的短 query；改写失败会回退原问题。
+7. 改写后的 query 会生成 embedding。
+8. 检索服务计算 query 向量和 chunk 向量的 cosine similarity，得到 `vectorScore`。
+9. 系统根据 query 关键词对命中文件名或正文的 chunk 计算 `keywordScore`。
+10. Hybrid Retrieval 根据 `vectorScore` 和 `keywordScore` 计算 `finalScore`，并保留旧字段 `score=finalScore`。
+11. MMR 从候选 Top-N chunks 中选择最终 Top-K，降低重复片段进入上下文的概率。
+12. 可选 Rerank 默认关闭，主流程不依赖额外重排调用。
+13. 将 retrieved chunks 拼接进 prompt。
+14. 通过 provider router 调用 Kimi API 生成最终回答。
+15. API 返回回答和可追踪的 `retrievedChunks`。
+
+## v1.4 Advanced RAG Retrieval Pipeline
+
+v1.4 重点提升检索质量和简历含金量，不引入 Elasticsearch、向量数据库或新的中间件，仍然基于当前内存索引完成高级检索链路。
+
+```text
+用户问题
+  -> Query Rewrite
+  -> Ollama Embedding
+  -> Hybrid Retrieval(vectorScore + keywordScore)
+  -> MMR(candidate Top-N -> final Top-K)
+  -> Optional Rerank(default off)
+  -> RAG Prompt
+  -> Kimi Generation
+  -> reply + retrievedChunks
+```
+
+新增能力：
+
+- Query Rewrite：使用当前 generation provider 将用户问题改写成关键词化检索 query；失败自动 fallback 原问题。
+- Hybrid Retrieval：同时考虑向量相似度和关键词命中，返回 `vectorScore`、`keywordScore`、`finalScore`。
+- MMR：从候选 Top-N 中选择最终 Top-K，降低相似 chunk 重复，提高上下文多样性。
+- Optional Rerank：预留轻量 rerank 开关，默认关闭，保证主链路稳定。
+- 日志安全：只记录 `questionLength`、`retrievalQueryLength`、`promptLength` 等长度信息，不打印完整用户问题或完整 prompt。
 
 ## Provider 架构
 
@@ -132,7 +165,7 @@ ollama:
   read-timeout: 60s
 
 kimi:
-  base-url: https://api.moonshot.ai/v1
+  base-url: https://api.moonshot.cn/v1
   api-key: ${MOONSHOT_API_KEY:}
   model: kimi-k2.6
 
@@ -145,7 +178,36 @@ app:
   memory:
     enabled: true
     max-turns: 6
+
+rag:
+  rewrite:
+    enabled: true
+    max-length: 160
+  hybrid:
+    enabled: true
+    vector-weight: 1.0
+    keyword-weight: 0.35
+  mmr:
+    enabled: true
+    lambda: 0.75
+    candidate-size: 12
+  rerank:
+    enabled: false
 ```
+
+### v1.4 RAG 配置说明
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `rag.rewrite.enabled` | `true` | 是否启用 Query Rewrite |
+| `rag.rewrite.max-length` | `160` | 改写 query 最大长度 |
+| `rag.hybrid.enabled` | `true` | 是否启用 Hybrid Retrieval |
+| `rag.hybrid.vector-weight` | `1.0` | 向量分权重 |
+| `rag.hybrid.keyword-weight` | `0.35` | 关键词分权重 |
+| `rag.mmr.enabled` | `true` | 是否启用 MMR |
+| `rag.mmr.lambda` | `0.75` | 相关性和多样性的平衡系数，越高越偏相关性 |
+| `rag.mmr.candidate-size` | `12` | MMR 候选集大小 |
+| `rag.rerank.enabled` | `false` | 轻量 rerank 预留开关，默认关闭 |
 
 ### 配置 MOONSHOT_API_KEY
 
@@ -306,6 +368,9 @@ curl -X POST "http://localhost:8080/api/knowledge/ask" \
         "fileName": "test.txt",
         "chunkIndex": 2,
         "score": 0.8421,
+        "vectorScore": 0.7812,
+        "keywordScore": 0.1740,
+        "finalScore": 0.8421,
         "contentPreview": "这里是被检索命中的文档片段预览..."
       }
     ]
@@ -471,7 +536,16 @@ http://localhost:8080/index.html
 - 管理 `sessionId`、清空会话记忆、查看历史 session
 - 切换单文档 RAG、全局 RAG 和普通聊天
 - 通过气泡式消息查看用户问题和 AI 回答
-- 查看 RAG `retrievedChunks`、相似度分数和内容预览
+- 查看 RAG `retrievedChunks`、`score`、`vectorScore`、`keywordScore`、`finalScore` 和内容预览
+
+## v1.4 Advanced Retrieval 增强
+
+v1.4 在 v1.3 的产品化控制台基础上增强 RAG 检索链路：
+
+- 检索前 query 改写，提高口语化问题对技术关键词和文档片段的召回能力。
+- Hybrid score 拆分为 `vectorScore`、`keywordScore`、`finalScore`，让 `retrievedChunks` 更可解释。
+- MMR 在候选 Top-N 内做多样性选择，避免多个高度相似 chunk 挤占上下文窗口。
+- 所有增强都可通过 `rag.*.enabled` 配置关闭，便于对比原始向量检索效果。
 
 ## v1.3 产品化增强
 
@@ -565,7 +639,7 @@ ollama:
   read-timeout: 60s
 
 kimi:
-  base-url: https://api.moonshot.ai/v1
+  base-url: https://api.moonshot.cn/v1
   api-key: ${MOONSHOT_API_KEY:}
   model: kimi-k2.6
 ```
@@ -620,5 +694,6 @@ src/main/resources
 - embedding 走本地 Ollama，知识库索引可本地运行。
 - 生成模型通过 Kimi API provider 接入，兼顾回答质量和架构扩展性。
 - provider router 抽象清晰，后续可平滑扩展更多模型服务。
-- 检索结果通过 Top-K `retrievedChunks` 返回，回答依据可追踪。
+- 实现 Query Rewrite、Hybrid Retrieval、MMR 的 Advanced RAG Pipeline，可作为简历中的 AI 检索工程亮点。
+- 检索结果通过 Top-K `retrievedChunks` 返回，包含 `vectorScore`、`keywordScore`、`finalScore`，回答依据可追踪。
 - 前端控制台可直接演示上传、索引、检索、问答完整流程。

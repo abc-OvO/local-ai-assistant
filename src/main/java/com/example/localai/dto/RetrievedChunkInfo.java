@@ -19,5 +19,30 @@ public class RetrievedChunkInfo {
 
     private Double score;
 
+    private Double vectorScore;
+
+    private Double keywordScore;
+
+    private Double finalScore;
+
     private String contentPreview;
+
+    public RetrievedChunkInfo(
+            String chunkId,
+            String documentId,
+            String fileName,
+            Integer chunkIndex,
+            Double score,
+            String contentPreview
+    ) {
+        this.chunkId = chunkId;
+        this.documentId = documentId;
+        this.fileName = fileName;
+        this.chunkIndex = chunkIndex;
+        this.score = score;
+        this.vectorScore = score;
+        this.keywordScore = 0.0;
+        this.finalScore = score;
+        this.contentPreview = contentPreview;
+    }
 }

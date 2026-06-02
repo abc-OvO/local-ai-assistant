@@ -29,9 +29,15 @@ public class DocumentChunk {
     private String embeddingJson;
 
     /**
-     * 检索时临时写入的相似度分数，便于返回和调试。
+     * 检索时临时写入的最终分数，便于兼容旧前端和旧接口字段。
      */
     private Double score;
+
+    private Double vectorScore;
+
+    private Double keywordScore;
+
+    private Double finalScore;
 
     public DocumentChunk(
             String chunkId,
@@ -49,5 +55,31 @@ public class DocumentChunk {
         this.content = content;
         this.embedding = embedding;
         this.score = score;
+        this.vectorScore = score;
+        this.keywordScore = 0.0;
+        this.finalScore = score;
+    }
+
+    public DocumentChunk(
+            String chunkId,
+            String documentId,
+            String fileName,
+            Integer chunkIndex,
+            String content,
+            List<Double> embedding,
+            Double vectorScore,
+            Double keywordScore,
+            Double finalScore
+    ) {
+        this.chunkId = chunkId;
+        this.documentId = documentId;
+        this.fileName = fileName;
+        this.chunkIndex = chunkIndex;
+        this.content = content;
+        this.embedding = embedding;
+        this.vectorScore = vectorScore;
+        this.keywordScore = keywordScore;
+        this.finalScore = finalScore;
+        this.score = finalScore;
     }
 }

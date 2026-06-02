@@ -40,3 +40,18 @@ app:
   memory:
     enabled: true
     max-turns: 6
+
+rag:
+  rewrite:
+    enabled: true
+    max-length: 160
+  hybrid:
+    enabled: true
+    vector-weight: 1.0
+    keyword-weight: 0.35
+  mmr:
+    enabled: true
+    lambda: 0.75
+    candidate-size: 12
+  rerank:
+    enabled: false
