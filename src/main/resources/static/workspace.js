@@ -1,8 +1,7 @@
 const state = {
   documents: [],
   selectedDocumentId: null,
-  detailDocumentId: null,
-  mode: "global",
+  mode: "auto",
   sessionId: "default",
   sending: false
 };
@@ -26,15 +25,15 @@ const els = {
   refreshDocumentsBtn: document.querySelector("#refreshDocumentsBtn"),
   documentStatus: document.querySelector("#documentStatus"),
   documentList: document.querySelector("#documentList"),
-  detailTitle: document.querySelector("#detailTitle"),
-  detailMeta: document.querySelector("#detailMeta"),
-  detailToggleBtn: document.querySelector("#detailToggleBtn"),
-  documentDetail: document.querySelector("#documentDetail"),
   sessionIdInput: document.querySelector("#sessionIdInput"),
   newSessionBtn: document.querySelector("#newSessionBtn"),
   clearMemoryBtn: document.querySelector("#clearMemoryBtn"),
   sessionStatus: document.querySelector("#sessionStatus"),
   sessionList: document.querySelector("#sessionList"),
+  modeMenuTrigger: document.querySelector("#modeMenuTrigger"),
+  modeMenu: document.querySelector("#modeMenu"),
+  currentModeLabel: document.querySelector("#currentModeLabel"),
+  autoModeBtn: document.querySelector("#autoModeBtn"),
   globalModeBtn: document.querySelector("#globalModeBtn"),
   singleModeBtn: document.querySelector("#singleModeBtn"),
   chatModeBtn: document.querySelector("#chatModeBtn"),
@@ -47,9 +46,10 @@ const els = {
 };
 
 const modeButtons = {
-  global: els.globalModeBtn,
+  auto: els.autoModeBtn,
+  chat: els.chatModeBtn,
   single: els.singleModeBtn,
-  chat: els.chatModeBtn
+  global: els.globalModeBtn,
 };
 
 async function requestJson(url, options = {}) {
@@ -111,6 +111,9 @@ function setBusy(button, busy, text) {
 }
 
 function setWorkspaceStatus(status, type = "") {
+  if (!els.workspaceStatusText) {
+    return;
+  }
   els.workspaceStatusText.textContent = status;
   els.workspaceStatusText.className = type;
 }
@@ -187,7 +190,6 @@ async function loadDocuments() {
     state.documents = Array.isArray(docs) ? docs : [];
     if (state.selectedDocumentId && !state.documents.some((doc) => doc.documentId === state.selectedDocumentId)) {
       state.selectedDocumentId = null;
-      clearDocumentDetail();
     }
     renderDocuments();
     setStatus(els.documentStatus, `已同步 ${state.documents.length} 个文档。`, "success");
@@ -198,8 +200,12 @@ async function loadDocuments() {
 
 function renderDocuments() {
   const chunkTotal = state.documents.reduce((sum, doc) => sum + Number(doc.chunkCount || 0), 0);
-  els.documentCountText.textContent = String(state.documents.length);
-  els.chunkTotalText.textContent = String(chunkTotal);
+  if (els.documentCountText) {
+    els.documentCountText.textContent = String(state.documents.length);
+  }
+  if (els.chunkTotalText) {
+    els.chunkTotalText.textContent = String(chunkTotal);
+  }
   els.documentList.innerHTML = "";
 
   if (state.documents.length === 0) {
@@ -219,12 +225,12 @@ function renderDocuments() {
         <span class="document-meta">✓ ${escapeHtml(doc.fileType || "-")} · chunks ${escapeHtml(doc.chunkCount ?? 0)} · ${escapeHtml(formatDateTime(doc.createdAt || doc.uploadTime))}</span>
       </button>
       <div class="document-actions">
-        <button class="ws-secondary detail-btn" type="button">查看</button>
+        <button class="ws-secondary select-btn" type="button">选择</button>
         <button class="ws-danger delete-btn" type="button">删除</button>
       </div>
     `;
     item.querySelector(".document-main").addEventListener("click", () => selectDocument(doc.documentId));
-    item.querySelector(".detail-btn").addEventListener("click", () => loadDocumentDetail(doc.documentId, true));
+    item.querySelector(".select-btn").addEventListener("click", () => selectDocument(doc.documentId));
     item.querySelector(".delete-btn").addEventListener("click", () => deleteDocument(doc.documentId, doc.fileName));
     els.documentList.appendChild(item);
   }
@@ -235,70 +241,7 @@ function renderDocuments() {
 function selectDocument(documentId) {
   state.selectedDocumentId = documentId;
   renderDocuments();
-  updateSelectedDocumentSummary();
-}
-
-function updateSelectedDocumentSummary() {
-  const doc = selectedDocument();
-  if (!doc) {
-    clearDocumentDetail();
-    return;
-  }
-
-  els.detailTitle.textContent = doc.fileName || "当前文档";
-  els.detailMeta.textContent = `chunks ${doc.chunkCount ?? 0}`;
-  els.documentDetail.hidden = true;
-  els.documentDetail.className = "detail-box ws-empty";
-  els.documentDetail.textContent = "点击“查看详情”展开内容预览和 chunk 摘要。";
-  els.detailToggleBtn.disabled = false;
-  els.detailToggleBtn.textContent = "查看详情";
-  state.detailDocumentId = null;
   updateModeText();
-}
-
-async function loadDocumentDetail(documentId, expand = false) {
-  try {
-    const detail = await requestJson(`/api/documents/${encodeURIComponent(documentId)}`);
-    state.selectedDocumentId = documentId;
-    state.detailDocumentId = documentId;
-    renderDocuments();
-    els.detailTitle.textContent = detail.fileName || "文档详情";
-    els.detailMeta.textContent = `${detail.fileType || "-"} · chunks ${detail.chunkCount ?? 0} · ${formatDateTime(detail.updatedAt || detail.createdAt)}`;
-    els.detailToggleBtn.disabled = false;
-    els.detailToggleBtn.textContent = expand ? "收起详情" : "查看详情";
-    els.documentDetail.hidden = !expand;
-    els.documentDetail.className = "detail-box";
-    els.documentDetail.innerHTML = `
-      <p class="detail-preview">${escapeHtml(detail.contentPreview || "暂无内容预览。")}</p>
-      <div class="brief-list">
-        ${(detail.chunks || []).map((chunk) => `
-          <article class="brief-item">
-            <strong>#${escapeHtml(chunk.chunkIndex ?? "-")}</strong>
-            <span>Embedding ${escapeHtml(chunk.embeddingDimension ?? 0)} 维</span>
-            <p>${escapeHtml(chunk.contentPreview || "")}</p>
-          </article>
-        `).join("")}
-      </div>
-    `;
-    updateModeText();
-  } catch (error) {
-    toast(`详情读取失败：${error.message}`, "error");
-  }
-}
-
-async function toggleDocumentDetail() {
-  if (!state.selectedDocumentId) {
-    return;
-  }
-
-  if (state.detailDocumentId !== state.selectedDocumentId) {
-    await loadDocumentDetail(state.selectedDocumentId, true);
-    return;
-  }
-
-  const nextHidden = !els.documentDetail.hidden;
-  els.documentDetail.hidden = nextHidden;
-  els.detailToggleBtn.textContent = nextHidden ? "查看详情" : "收起详情";
 }
 
 async function deleteDocument(documentId, fileName) {
@@ -309,24 +252,12 @@ async function deleteDocument(documentId, fileName) {
     await requestJson(`/api/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" });
     if (state.selectedDocumentId === documentId) {
       state.selectedDocumentId = null;
-      clearDocumentDetail();
     }
     await loadDocuments();
     toast("文档已删除");
   } catch (error) {
     toast(`删除失败：${error.message}`, "error");
   }
-}
-
-function clearDocumentDetail() {
-  els.detailTitle.textContent = "未选择文档";
-  els.detailMeta.textContent = "等待选择";
-  els.detailToggleBtn.disabled = true;
-  els.detailToggleBtn.textContent = "查看详情";
-  state.detailDocumentId = null;
-  els.documentDetail.hidden = true;
-  els.documentDetail.className = "detail-box ws-empty";
-  els.documentDetail.textContent = "点击文档中的“查看”加载内容预览和 chunk 摘要。";
 }
 
 async function uploadDocument() {
@@ -351,7 +282,6 @@ async function uploadDocument() {
     els.fileInput.value = "";
     els.fileNameText.textContent = "选择知识库文件";
     await loadDocuments();
-    updateSelectedDocumentSummary();
     setStatus(els.uploadStatus, `已上传 ${file.name}，并加入知识库。`, "success");
     toast(`已上传：${file.name}`);
   } catch (error) {
@@ -399,7 +329,7 @@ function newSession() {
   els.sessionIdInput.value = id;
   currentSessionId();
   clearMessages();
-  toast("已创建新会话");
+  toast("已开始新会话");
 }
 
 async function clearMemory() {
@@ -407,7 +337,7 @@ async function clearMemory() {
   try {
     await requestJson(`/api/chat/memory/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
     await loadSessions();
-    toast("会话记忆已清空");
+    toast("当前会话上下文已清除");
   } catch (error) {
     toast(`清空失败：${error.message}`, "error");
   }
@@ -418,9 +348,34 @@ function updateMode(mode) {
   for (const [name, button] of Object.entries(modeButtons)) {
     const active = name === mode;
     button.classList.toggle("active", active);
-    button.setAttribute("aria-selected", String(active));
+    button.setAttribute("aria-checked", String(active));
   }
+  els.currentModeLabel.textContent = {
+    auto: "自动模式",
+    chat: "普通对话",
+    single: "单文档问答",
+    global: "全局知识库"
+  }[mode];
+  closeModeMenu();
   updateModeText();
+}
+
+function openModeMenu() {
+  els.modeMenu.hidden = false;
+  els.modeMenuTrigger.setAttribute("aria-expanded", "true");
+}
+
+function closeModeMenu() {
+  els.modeMenu.hidden = true;
+  els.modeMenuTrigger.setAttribute("aria-expanded", "false");
+}
+
+function toggleModeMenu() {
+  if (els.modeMenu.hidden) {
+    openModeMenu();
+  } else {
+    closeModeMenu();
+  }
 }
 
 function updateModeText() {
@@ -430,30 +385,49 @@ function updateModeText() {
       ? `单文档 RAG：${doc.fileName}`
       : "使用单文档 RAG 前，请先选择一个文档。";
   } else if (state.mode === "global") {
-    els.activeContextText.textContent = "Global RAG 会检索全部已索引文档。";
+    els.activeContextText.textContent = "全局知识库会检索全部已索引文档。";
+  } else if (state.mode === "auto") {
+    els.activeContextText.textContent = "自动判断直接对话或知识库检索。";
   } else {
-    els.activeContextText.textContent = "Chat 只调用生成模型，不检索知识库。";
+    els.activeContextText.textContent = "普通对话只调用生成模型，不检索知识库。";
   }
 }
 
-function buildAskRequest(question) {
+async function buildAskRequest(question) {
   if (state.mode === "single") {
     return {
       url: "/api/knowledge/ask",
-      body: { documentId: state.selectedDocumentId, question }
+      body: { documentId: state.selectedDocumentId, question },
+      metadata: { ragUsed: true }
     };
   }
 
   if (state.mode === "global") {
     return {
       url: "/api/knowledge/ask-global",
-      body: { sessionId: currentSessionId(), question }
+      body: { sessionId: currentSessionId(), question },
+      metadata: { ragUsed: true }
     };
+  }
+
+  if (state.mode === "auto") {
+    const plannerStart = performance.now();
+    const planner = await requestJson("/api/planner", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question })
+    });
+    const intent = planner.intent === "DIRECT_CHAT" ? "DIRECT_CHAT" : "KNOWLEDGE_SEARCH";
+    const plannerCostMs = Math.round(performance.now() - plannerStart);
+    const route = WorkspaceAuto.buildAutoRoute(intent, currentSessionId(), question);
+    route.metadata.plannerCostMs = plannerCostMs;
+    return route;
   }
 
   return {
     url: "/api/chat",
-    body: { sessionId: currentSessionId(), message: question }
+    body: { sessionId: currentSessionId(), message: question },
+    metadata: { ragUsed: false }
   };
 }
 
@@ -468,33 +442,37 @@ async function ask() {
     return;
   }
 
-  const request = buildAskRequest(question);
   state.sending = true;
   setBusy(els.askBtn, true, "生成中");
-  setWorkspaceStatus("思考中...", "loading");
-  setStatus(els.askStatus, "正在生成回答...", "loading");
+  setWorkspaceStatus(state.mode === "auto" ? "规划中..." : "思考中...", "loading");
+  setStatus(els.askStatus, state.mode === "auto" ? "正在判断是否需要检索..." : "正在生成回答...", "loading");
   appendMessage("user", question);
   const assistantMessage = appendAssistantLoading();
   els.questionInput.value = "";
   renderChunks([]);
 
   try {
+    const request = await buildAskRequest(question);
+    setWorkspaceStatus(request.metadata?.ragUsed ? "检索中..." : "思考中...", "loading");
+    setStatus(els.askStatus, request.metadata?.ragUsed ? "正在检索知识库并生成回答..." : "正在生成回答...", "loading");
     const result = await requestJson(request.url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request.body)
     });
+    const chunks = WorkspaceAuto.chunksForAssistant(request.metadata, result);
     await renderAssistantResult(
       assistantMessage,
       result.reply || "",
       result.model,
-      Array.isArray(result.retrievedChunks) ? result.retrievedChunks : []
+      chunks,
+      request.metadata
     );
     await loadSessions();
     setStatus(els.askStatus, "回答完成。", "success");
   } catch (error) {
     const friendly = error.message.includes("\u5f53\u524d\u6ca1\u6709\u4efb\u4f55\u53ef\u68c0\u7d22\u6587\u6863")
-      ? "请先上传文档，再使用 Global RAG。"
+      ? "请先上传文档，再使用全局知识库。"
       : error.message;
     renderAssistantError(assistantMessage, friendly);
     setStatus(els.askStatus, `请求失败：${friendly}`, "error");
@@ -508,7 +486,7 @@ async function ask() {
 function clearMessages() {
   els.messageList.innerHTML = `
     <div class="ws-welcome">
-      <p class="ws-label">New Session</p>
+      <p class="ws-label">新会话</p>
       <h3>新的会话已准备好。</h3>
       <p>上传文档或直接提问，Local AI Workspace 会在这里保留上下文。</p>
     </div>
@@ -542,6 +520,7 @@ function appendAssistantLoading() {
     <div class="typing-dots" aria-label="AI 正在思考">
       <span></span><span></span><span></span>
     </div>
+    <div class="planner-badge" hidden></div>
     <p class="message-content"></p>
     <div class="message-sources"></div>
   `;
@@ -550,7 +529,7 @@ function appendAssistantLoading() {
   return item;
 }
 
-async function renderAssistantResult(item, content, model = "", chunks = []) {
+async function renderAssistantResult(item, content, model = "", chunks = [], metadata = {}) {
   item.className = "message assistant";
   item.querySelector(".message-role").innerHTML = `AI${model ? `<span>${escapeHtml(model)}</span>` : ""}`;
   const dots = item.querySelector(".typing-dots");
@@ -558,10 +537,28 @@ async function renderAssistantResult(item, content, model = "", chunks = []) {
     dots.remove();
   }
 
+  renderPlannerBadge(item.querySelector(".planner-badge"), metadata);
   const contentEl = item.querySelector(".message-content");
   await streamText(contentEl, content || "未返回回答。");
-  renderSources(item.querySelector(".message-sources"), chunks);
+  renderSources(item.querySelector(".message-sources"), metadata.ragUsed === false ? [] : chunks);
   els.messageList.scrollTop = els.messageList.scrollHeight;
+}
+
+function renderPlannerBadge(target, metadata = {}) {
+  if (!target || metadata.mode !== "auto") {
+    if (target) {
+      target.hidden = true;
+      target.innerHTML = "";
+    }
+    return;
+  }
+
+  target.hidden = false;
+  target.innerHTML = `
+    <span>Auto Planner</span>
+    <strong>${escapeHtml(metadata.intent || "-")}</strong>
+    <em>${metadata.ragUsed ? "RAG" : "Chat"} · ${escapeHtml(metadata.plannerCostMs ?? "-")}ms</em>
+  `;
 }
 
 function renderAssistantError(item, message) {
@@ -662,7 +659,6 @@ async function refreshAll() {
 els.applyProviderBtn.addEventListener("click", switchProvider);
 els.refreshAllBtn.addEventListener("click", refreshAll);
 els.refreshDocumentsBtn.addEventListener("click", loadDocuments);
-els.detailToggleBtn.addEventListener("click", toggleDocumentDetail);
 els.uploadBtn.addEventListener("click", uploadDocument);
 els.fileInput.addEventListener("change", () => {
   const file = els.fileInput.files[0];
@@ -671,16 +667,29 @@ els.fileInput.addEventListener("change", () => {
 els.sessionIdInput.addEventListener("input", currentSessionId);
 els.newSessionBtn.addEventListener("click", newSession);
 els.clearMemoryBtn.addEventListener("click", clearMemory);
-els.globalModeBtn.addEventListener("click", () => updateMode("global"));
-els.singleModeBtn.addEventListener("click", () => updateMode("single"));
+els.modeMenuTrigger.addEventListener("click", toggleModeMenu);
+els.autoModeBtn.addEventListener("click", () => updateMode("auto"));
 els.chatModeBtn.addEventListener("click", () => updateMode("chat"));
+els.singleModeBtn.addEventListener("click", () => updateMode("single"));
+els.globalModeBtn.addEventListener("click", () => updateMode("global"));
 els.askBtn.addEventListener("click", ask);
 els.questionInput.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
     ask();
   }
 });
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".ws-mode-picker")) {
+    closeModeMenu();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeModeMenu();
+    els.modeMenuTrigger.focus();
+  }
+});
 
 currentSessionId();
-updateMode("global");
+updateMode("auto");
 refreshAll();

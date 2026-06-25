@@ -10,6 +10,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "rag")
 public class RagProperties {
 
+    private Auto auto = new Auto();
+
+    private Planner planner = new Planner();
+
     private Rewrite rewrite = new Rewrite();
 
     private Hybrid hybrid = new Hybrid();
@@ -17,6 +21,20 @@ public class RagProperties {
     private Mmr mmr = new Mmr();
 
     private Rerank rerank = new Rerank();
+
+    @Data
+    public static class Auto {
+
+        private boolean enabled = true;
+    }
+
+    @Data
+    public static class Planner {
+
+        private boolean enabled = true;
+
+        private String fallbackIntent = "KNOWLEDGE_SEARCH";
+    }
 
     @Data
     public static class Rewrite {

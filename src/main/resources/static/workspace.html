@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <title>Local AI Workspace</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236d4aff'/%3E%3Cpath d='M17 24a9 9 0 0 1 9-9h13a9 9 0 0 1 9 9v7a9 9 0 0 1-9 9h-8l-10 7v-7h-4a9 9 0 0 1-9-9z' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M25 27h17M25 34h10' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./workspace.css?v=20260625-session-layout">
+</head>
+<body>
+  <a class="ws-skip" href="#wsMain">跳到主要内容</a>
+  <div id="toastHost" class="ws-toasts" aria-live="polite"></div>
+
+  <div class="ws-shell">
+    <header class="ws-header">
+      <div class="ws-brand">
+        <div class="ws-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 8a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v3a4 4 0 0 1-4 4h-3l-5 4v-4H5a4 4 0 0 1-4-4V8z"></path>
+            <path d="M8 8h8"></path>
+            <path d="M8 11h5"></path>
+          </svg>
+        </div>
+        <div>
+          <p class="ws-kicker">Local AI Workspace</p>
+          <h1>Local AI Workspace</h1>
+        </div>
+      </div>
+
+    </header>
+
+    <main id="wsMain" class="ws-grid">
+      <aside class="ws-sidebar">
+        <section class="ws-card">
+          <div class="ws-card-head">
+            <div>
+              <p class="ws-label">模型</p>
+              <h2>生成模型</h2>
+            </div>
+            <button id="refreshAllBtn" class="ws-icon-btn" type="button" aria-label="刷新全部状态">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                <path d="M3 21v-5h5"></path>
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                <path d="M21 3v5h-5"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="ws-provider-row">
+            <label class="ws-field">
+              <span>当前模型</span>
+              <select id="providerSelect">
+                <option value="kimi-k2.6">Kimi K2.6</option>
+              </select>
+            </label>
+            <button id="applyProviderBtn" class="ws-primary ws-apply-provider" type="button">应用</button>
+          </div>
+          <p class="ws-mini-meta">Embedding 模型：<span id="embeddingModelText">-</span></p>
+          <p id="providerStatus" class="ws-status">正在读取模型状态...</p>
+        </section>
+
+        <section class="ws-card">
+          <div class="ws-card-head">
+            <div>
+              <p class="ws-label">会话</p>
+              <h2>会话记忆</h2>
+            </div>
+          </div>
+          <label class="ws-field">
+            <span>sessionId</span>
+            <input id="sessionIdInput" type="text" value="default" autocomplete="off">
+          </label>
+          <div class="ws-session-tools">
+            <button id="newSessionBtn" class="ws-session-action" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+              <span><strong>新会话</strong><small>开始独立对话</small></span>
+            </button>
+            <button id="clearMemoryBtn" class="ws-session-action danger" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"></path></svg>
+              <span><strong>清除上下文</strong><small>仅清除当前会话</small></span>
+            </button>
+          </div>
+          <p id="sessionStatus" class="ws-status">当前 session：default</p>
+          <div id="sessionList" class="ws-list"></div>
+        </section>
+
+        <section class="ws-card">
+          <div class="ws-card-head">
+            <div>
+              <p class="ws-label">上传</p>
+              <h2>上传文档</h2>
+            </div>
+            <span class="ws-chip">txt / md / pdf</span>
+          </div>
+          <label class="ws-file">
+            <input id="fileInput" type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf">
+            <span id="fileNameText">选择知识库文件</span>
+          </label>
+          <button id="uploadBtn" class="ws-primary ws-full" type="button">上传并索引</button>
+          <p id="uploadStatus" class="ws-status">等待上传任务。</p>
+        </section>
+
+        <section class="ws-card">
+          <div class="ws-card-head">
+            <div>
+              <p class="ws-label">文档</p>
+              <h2>文档管理</h2>
+            </div>
+            <button id="refreshDocumentsBtn" class="ws-secondary" type="button">刷新</button>
+          </div>
+          <p id="documentStatus" class="ws-status">正在同步文档...</p>
+          <div id="documentList" class="ws-list"></div>
+        </section>
+
+      </aside>
+
+      <section class="ws-main" aria-label="聊天工作区">
+        <section class="ws-card ws-chat-card">
+          <div class="ws-chat-head">
+            <div>
+              <p class="ws-label">助手</p>
+              <h2>AI 助手</h2>
+            </div>
+            <div class="ws-mode-picker">
+              <button id="modeMenuTrigger" class="ws-mode-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
+                <span>
+                  <small>当前模式</small>
+                  <strong id="currentModeLabel">自动模式</strong>
+                </span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 9 5 5 5-5"></path></svg>
+              </button>
+              <div id="modeMenu" class="ws-mode-menu" role="menu" aria-label="问答模式" hidden>
+                <button id="autoModeBtn" class="ws-mode-btn active" type="button" role="menuitemradio" aria-checked="true">
+                  <span><strong>自动模式</strong><small>自动判断直接对话或知识库检索</small></span><span class="ws-mode-check">✓</span>
+                </button>
+                <button id="chatModeBtn" class="ws-mode-btn" type="button" role="menuitemradio" aria-checked="false">
+                  <span><strong>普通对话</strong><small>仅使用生成模型，不检索知识库</small></span><span class="ws-mode-check">✓</span>
+                </button>
+                <button id="singleModeBtn" class="ws-mode-btn" type="button" role="menuitemradio" aria-checked="false">
+                  <span><strong>单文档问答</strong><small>围绕左侧已选择的文档进行检索</small></span><span class="ws-mode-check">✓</span>
+                </button>
+                <button id="globalModeBtn" class="ws-mode-btn" type="button" role="menuitemradio" aria-checked="false">
+                  <span><strong>全局知识库</strong><small>检索全部已索引文档后生成回答</small></span><span class="ws-mode-check">✓</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <p id="activeContextText" class="ws-sr" aria-live="polite">自动判断直接对话或知识库检索。</p>
+
+          <div id="messageList" class="ws-messages" aria-live="polite">
+            <div class="ws-welcome">
+              <p class="ws-label">就绪</p>
+              <h3>有什么可以帮您？</h3>
+              <p>直接提问，或先上传文档构建知识库。</p>
+            </div>
+          </div>
+
+          <div id="chunksList" class="ws-chunks" hidden></div>
+
+          <div class="ws-composer">
+            <label class="ws-sr" for="questionInput">输入问题</label>
+            <textarea id="questionInput" rows="3" placeholder="向 Local AI Workspace 提问，Command/Ctrl + Enter 发送"></textarea>
+            <button id="askBtn" class="ws-primary ws-send" type="button">发送</button>
+          </div>
+          <p id="askStatus" class="ws-status">等待问题输入。</p>
+        </section>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="./workspace-auto.js?v=20260625-session-layout"></script>
+  <script src="./workspace.js?v=20260625-session-layout"></script>
+</body>
+</html>

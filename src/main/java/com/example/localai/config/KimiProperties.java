@@ -3,6 +3,9 @@ package com.example.localai.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @ConfigurationProperties(prefix = "kimi")
 public class KimiProperties {
@@ -17,5 +20,11 @@ public class KimiProperties {
      */
     private String apiKey;
 
-    private String model = "kimi-k2.6";
+    private volatile String model = "kimi-k2.6";
+
+    private List<String> availableModels = new ArrayList<>(List.of(
+            "kimi-k2.6",
+            "kimi-k2.5",
+            "kimi-k2-thinking"
+    ));
 }

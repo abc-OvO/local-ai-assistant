@@ -30,6 +30,10 @@ kimi:
   base-url: https://api.moonshot.cn/v1
   api-key: ${MOONSHOT_API_KEY:}
   model: kimi-k2.6
+  available-models:
+    - kimi-k2.6
+    - kimi-k2.5
+    - kimi-k2-thinking
 
 app:
   upload-dir: data/uploads
@@ -42,6 +46,11 @@ app:
     max-turns: 6
 
 rag:
+  auto:
+    enabled: true
+  planner:
+    enabled: true
+    fallback-intent: KNOWLEDGE_SEARCH
   rewrite:
     enabled: true
     max-length: 160

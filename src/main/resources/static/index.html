@@ -3,131 +3,236 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Local AI RAG Console</title>
-  <link rel="stylesheet" href="./style.css">
+  <meta name="description" content="LocalAI Assistant 是一个本地 AI 知识库聊天平台，支持多文档 RAG、语义检索、会话记忆、本地 Embedding 与 Provider 切换。">
+  <meta http-equiv="Cache-Control" content="no-cache">
+  <title>LocalAI Assistant | 本地 AI 知识库聊天平台</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236d4aff'/%3E%3Cpath d='M17 24a9 9 0 0 1 9-9h13a9 9 0 0 1 9 9v7a9 9 0 0 1-9 9h-8l-10 7v-7h-4a9 9 0 0 1-9-9z' fill='none' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M25 27h17M25 34h10' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css?v=20260603-landing">
 </head>
 <body>
-  <div id="toastHost" class="toast-host" aria-live="polite"></div>
-  <div class="shell">
-    <header class="topbar">
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="site-header" aria-label="站点导航">
+    <a class="brand" href="#top" aria-label="LocalAI Assistant 首页">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M5 7.8A4.8 4.8 0 0 1 9.8 3h4.4A4.8 4.8 0 0 1 19 7.8v3.5a4.8 4.8 0 0 1-4.8 4.8h-2.1L7 21v-4.9H5.8A4.8 4.8 0 0 1 1 11.3V7.8z"></path>
+          <path d="M7.2 8h9.6M7.2 11.3h5.7"></path>
+        </svg>
+      </span>
+      <span>LocalAI Assistant</span>
+    </a>
+    <nav class="nav-links" aria-label="页面导航">
+      <a href="#workflow">流程</a>
+      <a href="#features">功能</a>
+      <a href="#stack">技术栈</a>
+    </nav>
+    <a class="header-cta" href="./workspace.html">进入工作区</a>
+  </header>
+
+  <main id="main">
+    <section id="top" class="hero-section">
+      <div class="hero-copy">
+        <p class="eyebrow">本地 Embedding + Kimi 生成 + 多文档 RAG</p>
+        <h1>LocalAI Assistant</h1>
+        <p class="hero-lead">一个面向开发者作品集的 AI 知识库聊天平台，将文档上传、语义检索、可追踪来源和会话记忆整合到同一套清晰工作流中。</p>
+        <div class="hero-actions">
+          <a class="primary-cta" href="./workspace.html">
+            <span>进入工作区</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14"></path>
+              <path d="m13 6 6 6-6 6"></path>
+            </svg>
+          </a>
+          <a class="secondary-cta" href="#workflow">查看 RAG 流程</a>
+        </div>
+      </div>
+
+      <div class="hero-visual" aria-label="LocalAI Assistant 对话预览">
+        <div class="product-shell">
+          <div class="product-topbar">
+            <span></span>
+            <span></span>
+            <span></span>
+            <strong>知识库会话 / rag-session</strong>
+          </div>
+          <div class="product-grid">
+            <aside class="preview-sidebar">
+              <div class="mini-section">
+                <p>Provider</p>
+                <div class="switch-row">
+                  <span class="switch-pill active">Kimi</span>
+                  <span class="switch-pill">Ollama</span>
+                </div>
+              </div>
+              <div class="upload-preview">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 16V4"></path>
+                  <path d="m7 9 5-5 5 5"></path>
+                  <path d="M4 16v2.5A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V16"></path>
+                </svg>
+                <div>
+                  <strong>rag-notes.pdf</strong>
+                  <span>已索引 24 个 chunk</span>
+                </div>
+              </div>
+              <div class="doc-list">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </aside>
+
+            <section class="chat-preview">
+              <div class="message-bubble user">这个项目的多文档 RAG 流程是怎样的？</div>
+              <div class="message-bubble ai">
+                <span class="role">AI 正在流式回答</span>
+                <p class="stream-line" data-stream="系统会解析并切分多个文档，使用 Ollama 生成本地向量，通过 Hybrid Retrieval 召回 Top-K 结果，最后交给 Kimi 生成可追踪回答。">系统会解析并切分多个文档，使用 Ollama 生成本地向量，通过 Hybrid Retrieval 召回 Top-K 结果，最后交给 Kimi 生成可追踪回答。</p>
+              </div>
+              <div class="chunk-preview">
+                <div>
+                  <strong>retrievedChunks #1</strong>
+                  <span>finalScore 0.8732</span>
+                  <p>ChunkingService 将长文档拆分为可检索片段，并保留原文位置。</p>
+                </div>
+                <div>
+                  <strong>retrievedChunks #2</strong>
+                  <span>finalScore 0.8214</span>
+                  <p>EmbeddingService 使用 Ollama 在本地生成用于检索的语义向量。</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="workflow" class="workflow-section">
+      <div class="section-heading">
+        <p class="eyebrow">核心流程</p>
+        <h2>从文档上传到可追踪回答</h2>
+      </div>
+      <div class="workflow-board">
+        <article class="upload-panel">
+          <div class="panel-header">
+            <span>上传文档</span>
+            <strong>txt / md / pdf</strong>
+          </div>
+          <div class="drop-zone">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 2H7a3 3 0 0 0-3 3v14a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8z"></path>
+              <path d="M14 2v6h6"></path>
+              <path d="M8 15h8"></path>
+              <path d="M8 18h5"></path>
+            </svg>
+            <div>
+              <strong>project-readme.md</strong>
+              <span>解析、切分和索引一步完成</span>
+            </div>
+          </div>
+          <div class="progress-line"><span></span></div>
+        </article>
+
+        <article class="retrieval-panel">
+          <div class="panel-header">
+            <span>检索片段预览</span>
+            <strong>Top-K</strong>
+          </div>
+          <div class="retrieval-item">
+            <span class="rank">01</span>
+            <p>多文档检索会搜索全部已索引资料，并结合语义与关键词信号排序。</p>
+          </div>
+          <div class="retrieval-item">
+            <span class="rank">02</span>
+            <p>每个结果都包含 score、vectorScore、keywordScore 和 finalScore。</p>
+          </div>
+        </article>
+
+        <article class="session-panel">
+          <div class="panel-header">
+            <span>会话记忆</span>
+            <strong>sessionId</strong>
+          </div>
+          <div class="memory-row">
+            <span>上一轮</span>
+            <p>“这个项目使用什么架构？”</p>
+          </div>
+          <div class="memory-row active">
+            <span>当前轮</span>
+            <p>“Provider 是如何切换的？”</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="features" class="feature-section">
+      <div class="section-heading compact">
+        <p class="eyebrow">平台功能</p>
+        <h2>面向 RAG 项目演示的完整功能</h2>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <span class="feature-icon">RAG</span>
+          <h3>多文档 RAG</h3>
+          <p>从全部已索引文档中检索相关片段，并在回答中保留来源依据。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">SEM</span>
+          <h3>语义搜索</h3>
+          <p>结合本地向量检索和关键词信号，减少仅靠字面匹配造成的漏检。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">MEM</span>
+          <h3>会话记忆</h3>
+          <p>通过 sessionId 管理多轮上下文，让后续提问能够延续上一轮主题。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">EMB</span>
+          <h3>本地 Embedding</h3>
+          <p>Ollama 在本地生成 Embedding，让知识库索引可以直接在本机运行。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">API</span>
+          <h3>Provider 切换</h3>
+          <p>通过 Router 在 Kimi 和 Ollama 之间切换生成服务，并支持后续扩展。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-icon">OBS</span>
+          <h3>可解释检索</h3>
+          <p>前端展示 retrievedChunks 和评分明细，便于调试 RAG 检索质量。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="stack" class="stack-section">
+      <div class="section-heading">
+        <p class="eyebrow">技术栈</p>
+        <h2>本地优先、接口清晰的项目架构</h2>
+      </div>
+      <div class="logo-strip" aria-label="技术栈">
+        <div class="tech-logo spring"><span>SB</span><strong>Spring Boot</strong></div>
+        <div class="tech-logo java"><span>J</span><strong>Java 17</strong></div>
+        <div class="tech-logo ollama"><span>O</span><strong>Ollama</strong></div>
+        <div class="tech-logo kimi"><span>K</span><strong>Kimi</strong></div>
+        <div class="tech-logo mysql"><span>SQL</span><strong>MySQL</strong></div>
+        <div class="tech-logo rag"><span>RAG</span><strong>RAG Pipeline</strong></div>
+      </div>
+    </section>
+
+    <section class="final-cta">
       <div>
-        <p class="eyebrow">Cyber Knowledge Terminal · v1.3</p>
-        <h1>Local AI RAG Console</h1>
-        <p class="subtitle">Local Embedding · Kimi Generation · Multi-Document Retrieval</p>
+        <p class="eyebrow">打开工作区</p>
+        <h2>上传一份文档，开始体验本地知识库问答流程。</h2>
       </div>
-      <div class="status-strip">
-        <div class="status-chip"><span>GEN</span><strong id="generationProviderText">-</strong></div>
-        <div class="status-chip"><span>EMB</span><strong id="embeddingProviderText">-</strong></div>
-        <div class="status-chip"><span>MODEL</span><strong id="embeddingModelText">-</strong></div>
-        <div class="status-chip"><span>DOCS</span><strong id="documentCountText">0</strong></div>
-        <div class="status-chip"><span>CHUNKS</span><strong id="chunkTotalText">0</strong></div>
-      </div>
-    </header>
-
-    <main class="console-grid">
-      <aside class="side-stack">
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-code">PROVIDER</p>
-              <h2>生成模型</h2>
-            </div>
-            <button id="refreshAllBtn" class="ghost-button" type="button">刷新</button>
-          </div>
-          <div class="provider-row">
-            <select id="providerSelect">
-              <option value="kimi">kimi</option>
-              <option value="ollama">ollama</option>
-            </select>
-            <button id="applyProviderBtn" class="primary-button" type="button">应用</button>
-          </div>
-          <div id="providerStatus" class="status">正在读取 provider 状态...</div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-code">UPLOAD</p>
-              <h2>文档上传</h2>
-            </div>
-            <span class="hint">txt · md · pdf</span>
-          </div>
-          <label class="file-picker">
-            <input id="fileInput" type="file" accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf">
-            <span id="fileNameText">选择知识库文件</span>
-          </label>
-          <button id="uploadBtn" class="primary-button wide" type="button">上传并索引</button>
-          <div id="uploadStatus" class="status">等待上传任务。</div>
-        </section>
-
-        <section class="panel documents-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-code">DOCUMENTS</p>
-              <h2>文档管理</h2>
-            </div>
-            <button id="refreshDocumentsBtn" class="ghost-button" type="button">刷新</button>
-          </div>
-          <div id="documentStatus" class="status">正在同步文档...</div>
-          <div id="documentList" class="document-list"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-code">SESSION</p>
-              <h2>会话管理</h2>
-            </div>
-          </div>
-          <input id="sessionIdInput" class="text-input" type="text" value="default" placeholder="sessionId">
-          <div class="button-row">
-            <button id="newSessionBtn" class="ghost-button" type="button">新建会话</button>
-            <button id="clearMemoryBtn" class="ghost-button danger" type="button">清空记忆</button>
-          </div>
-          <div id="sessionStatus" class="status">当前 session：default</div>
-          <div id="sessionList" class="session-list"></div>
-        </section>
-      </aside>
-
-      <section class="workspace">
-        <section class="panel detail-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-code">DOCUMENT DETAIL</p>
-              <h2 id="detailTitle">未选择文档</h2>
-            </div>
-            <span id="detailMeta" class="hint">查看文档详情后会显示 chunks 摘要</span>
-          </div>
-          <div id="documentDetail" class="detail-box empty-state">点击文档列表中的“详情”查看 contentPreview 和 chunk 摘要。</div>
-        </section>
-
-        <section class="panel chat-panel">
-          <div class="chat-header">
-            <div>
-              <p class="section-code">QUERY ENGINE</p>
-              <h2>问答控制台</h2>
-            </div>
-            <div class="mode-switch" role="tablist" aria-label="问答模式">
-              <button id="globalModeBtn" class="mode-button active" type="button">全局 RAG</button>
-              <button id="singleModeBtn" class="mode-button" type="button">单文档 RAG</button>
-              <button id="chatModeBtn" class="mode-button" type="button">普通聊天</button>
-            </div>
-          </div>
-          <div id="activeContextText" class="context-line">全局 RAG 会检索全部已索引文档。</div>
-          <div id="messageList" class="message-list">
-            <div class="empty-state">输入问题后，用户消息、AI 回答和检索片段会显示在这里。</div>
-          </div>
-          <div id="chunksList" class="chunks-list"></div>
-          <div class="composer">
-            <textarea id="questionInput" rows="4" placeholder="输入问题，Command/Ctrl + Enter 发送"></textarea>
-            <button id="askBtn" class="primary-button send-button" type="button">发送</button>
-          </div>
-          <div id="askStatus" class="status">等待问题输入。</div>
-        </section>
-      </section>
-    </main>
-  </div>
-
-  <script src="./app.js"></script>
+      <a class="primary-cta" href="./workspace.html">
+        <span>进入工作区</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 12h14"></path>
+          <path d="m13 6 6 6-6 6"></path>
+        </svg>
+      </a>
+    </section>
+  </main>
+  <script src="./landing.js?v=20260603-landing"></script>
 </body>
 </html>
