@@ -1,4 +1,5 @@
-# Local AI Assistant
+# 🚀 Local AI Assistant
+Java 17 | Spring Boot 3 | RAG | Ollama | Kimi
 
 > 基于 **Java 17 + Spring Boot 3** 的本地多文档 RAG 知识库问答系统，覆盖文档解析、Embedding、Hybrid Retrieval、MMR、Auto RAG 与多模型 Provider Router。
 
