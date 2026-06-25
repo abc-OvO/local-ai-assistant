@@ -25,21 +25,30 @@
 
 ## 项目截图
 
-当前仓库暂未提交真实截图，以下位置为待补充项，不使用生成图片代替实际运行效果。
+以下截图来自本地实际运行环境，演示数据不包含 API Key、数据库密码或个人文档内容。
 
-| 页面 | 计划文件 | 状态 |
+| 页面 | 文件 | 说明 |
 | --- | --- | --- |
-| Landing Page | `docs/images/landing.png` | 待补充真实截图 |
-| Chat-first Workspace | `docs/images/workspace.png` | 待补充真实截图 |
-| RAG 问答与来源评分 | `docs/images/rag-demo.png` | 待补充真实截图 |
-| 系统架构图 | `docs/images/architecture.png` | 待补充导出图片 |
+| Landing Page | `docs/images/landing.png` | 项目定位与产品入口 |
+| Chat-first Workspace | `docs/images/workspace.png` | 模型、会话、文档和聊天工作区 |
+| RAG 问答与来源评分 | `docs/images/rag-demo.png` | Auto Planner、来源 Chunk 与检索评分 |
+| 系统架构图 | `docs/images/architecture.png` | 文档入库、检索和生成链路 |
 
-<!-- ![Landing Page](docs/images/landing.png) -->
-<!-- ![Chat-first Workspace](docs/images/workspace.png) -->
-<!-- ![RAG Demo](docs/images/rag-demo.png) -->
-<!-- ![Architecture](docs/images/architecture.png) -->
+### Landing Page
 
-截图命名、建议内容和替换方式见 [`docs/images/README.md`](docs/images/README.md)。
+![Local AI Assistant Landing Page](docs/images/landing.png)
+
+### Chat-first Workspace
+
+![Local AI Assistant Workspace](docs/images/workspace.png)
+
+### RAG Demo
+
+![Auto RAG 问答、来源与检索评分](docs/images/rag-demo.png)
+
+### Architecture
+
+![Local AI Assistant System Architecture](docs/images/architecture.png)
 
 ## 核心功能
 
